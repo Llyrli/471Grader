@@ -1,0 +1,29 @@
+{
+  "student_id": "anon-001",
+  "scored_at": "2026-03-03T10:11:43.111045+00:00",
+  "execution_status": "success",
+  "Q1_score": 10,
+  "Q2_score": 10,
+  "Q3_score": 0,
+  "final_score": 20,
+  "feedback": {
+    "Q1": "Feedback unavailable.",
+    "Q2": "Feedback unavailable.",
+    "Q3": "Feedback unavailable.",
+    "overall": "Feedback unavailable."
+  },
+  "autograde_detail": {
+    "Q1": {
+      "passed": true,
+      "details": "u=[0.0, 0.5, 1.0]"
+    },
+    "Q2": {
+      "passed": true,
+      "details": "u=[0.0, 0.015, 0.02]"
+    },
+    "Q3": {
+      "passed": false,
+      "details": "expected≈[0.0, 0.0, 0.002, 0.0]; arrays of shape (4,) found: ['u_2_15=[0.0, 0.004, 0.008, 0.01]', 'F_2_15=[-2.0, 0.0, 0.0, 2.0]']"
+    }
+  }
+}

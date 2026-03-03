@@ -1,0 +1,29 @@
+{
+  "student_id": "anon-002",
+  "scored_at": "2026-03-03T10:11:43.446451+00:00",
+  "execution_status": "success",
+  "Q1_score": 10,
+  "Q2_score": 10,
+  "Q3_score": 10,
+  "final_score": 30,
+  "feedback": {
+    "Q1": "Feedback unavailable.",
+    "Q2": "Feedback unavailable.",
+    "Q3": "Feedback unavailable.",
+    "overall": "Feedback unavailable."
+  },
+  "autograde_detail": {
+    "Q1": {
+      "passed": true,
+      "details": "u=[0.0, 0.5, 1.0]"
+    },
+    "Q2": {
+      "passed": true,
+      "details": "u=[0.0, 0.015, 0.02]"
+    },
+    "Q3": {
+      "passed": true,
+      "details": "u=[0.0, 0.0, 0.002, 0.0]"
+    }
+  }
+}
