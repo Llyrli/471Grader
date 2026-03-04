@@ -89,8 +89,18 @@ def _exec_safe(source: str, ns: dict) -> str | None:
         return f"{type(exc).__name__}: {exc}"
 
 
-def _search_namespace(ns: dict, expected: np.ndarray) -> np.ndarray | None:
-    """Return the first numpy array in ns that matches expected, or None."""
+def _search_namespace(
+    ns: dict, expected: np.ndarray
+) -> tuple[np.ndarray | None, float, np.ndarray | None]:
+    """Search namespace for an array matching expected.
+
+    Returns (matched_arr, best_abs_err, closest_arr):
+      - matched_arr  : array that passes allclose, or None
+      - best_abs_err : max absolute error of the closest shape-matching array
+      - closest_arr  : the closest array (for fail details), or None
+    """
+    best_err = float("inf")
+    closest: np.ndarray | None = None
     for key, val in ns.items():
         if key.startswith("_"):
             continue
@@ -98,24 +108,15 @@ def _search_namespace(ns: dict, expected: np.ndarray) -> np.ndarray | None:
             arr = np.asarray(val, dtype=float).ravel()
         except Exception:
             continue
-        if arr.shape == expected.shape and np.allclose(arr, expected, rtol=RTOL, atol=ATOL):
-            return arr
-    return None
-
-
-def _arrays_of_shape(ns: dict, shape: tuple) -> list[str]:
-    """Return names of arrays in ns with the given shape (for debug output)."""
-    found = []
-    for key, val in ns.items():
-        if key.startswith("_"):
+        if arr.shape != expected.shape:
             continue
-        try:
-            arr = np.asarray(val, dtype=float).ravel()
-            if arr.shape == shape:
-                found.append(f"{key}={arr.tolist()}")
-        except Exception:
-            pass
-    return found[:5]  # limit for readability
+        err = float(np.max(np.abs(arr - expected)))
+        if err < best_err:
+            best_err = err
+            closest = arr
+        if np.allclose(arr, expected, rtol=RTOL, atol=ATOL):
+            return arr, err, arr
+    return None, best_err, closest
 
 
 # ---------------------------------------------------------------------------
@@ -158,19 +159,29 @@ def run_tests(nb_path: Path) -> dict:
             if err:
                 results[q] = {"passed": False, "details": f"execution_failed: {err}"}
             else:
-                arr = _search_namespace(ns, expected)
+                arr, abs_err, closest = _search_namespace(ns, expected)
                 if arr is not None:
-                    results[q] = {"passed": True, "details": f"u={arr.tolist()}"}
-                else:
-                    hint = _arrays_of_shape(ns, expected.shape)
                     results[q] = {
-                        "passed": False,
-                        "details": (
-                            f"expected≈{expected.tolist()}; "
-                            f"arrays of shape {expected.shape} found: "
-                            f"{hint if hint else 'none'}"
-                        ),
+                        "passed": True,
+                        "details": f"max_abs_err={abs_err:.4g}",
                     }
+                else:
+                    if closest is not None:
+                        rel_err = abs_err / (np.max(np.abs(expected)) + 1e-12)
+                        results[q] = {
+                            "passed": False,
+                            "details": (
+                                f"max_abs_err={abs_err:.4g}, "
+                                f"max_rel_err={rel_err*100:.1f}%, "
+                                f"got={closest.tolist()}, "
+                                f"expected={expected.tolist()}"
+                            ),
+                        }
+                    else:
+                        results[q] = {
+                            "passed": False,
+                            "details": f"no array of shape {expected.shape} found in namespace",
+                        }
 
     # Mark any question whose cell was not found
     for q in results:

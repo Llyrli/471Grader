@@ -1,29 +1,35 @@
 {
-  "student_id": "anon-001",
-  "scored_at": "2026-03-03T10:11:43.111045+00:00",
-  "execution_status": "success",
+  "Q1_result_score": 3,
+  "Q1_process_score": 7,
   "Q1_score": 10,
+  "Q2_result_score": 3,
+  "Q2_process_score": 7,
   "Q2_score": 10,
-  "Q3_score": 0,
-  "final_score": 20,
+  "Q3_result_score": 0,
+  "Q3_process_score": 4,
+  "Q3_score": 4,
+  "final_score": 24,
   "feedback": {
-    "Q1": "Feedback unavailable.",
-    "Q2": "Feedback unavailable.",
-    "Q3": "Feedback unavailable.",
-    "overall": "Feedback unavailable."
+    "Q1": "The student's implementation is correct and follows the core FE steps. The global stiffness matrix is assembled properly, and the displacements and forces are calculated correctly. The final result is correct.",
+    "Q2": "The student's implementation is correct and follows the core FE steps. The global stiffness matrix is assembled properly, and the displacements and forces are calculated correctly. The final result is correct.",
+    "Q3": "The student's implementation has a significant conceptual mistake. The global stiffness matrix is assembled correctly, but the displacement vector and force calculations are incorrect, leading to the wrong final result. The issue seems to be in the handling of fixed and free nodes.",
+    "overall": "The student has a strong understanding of the FE method and correctly implements it for the first two problems. However, there is a major issue in the third problem related to the handling of fixed and free nodes. The visualization and the logical flow of the code are well-executed, and the student should focus on debugging the third problem."
   },
+  "student_id": "anon-001",
+  "scored_at": "2026-03-03T14:31:55.957126+00:00",
+  "execution_status": "success",
   "autograde_detail": {
     "Q1": {
       "passed": true,
-      "details": "u=[0.0, 0.5, 1.0]"
+      "details": "max_abs_err=0"
     },
     "Q2": {
       "passed": true,
-      "details": "u=[0.0, 0.015, 0.02]"
+      "details": "max_abs_err=0"
     },
     "Q3": {
       "passed": false,
-      "details": "expected≈[0.0, 0.0, 0.002, 0.0]; arrays of shape (4,) found: ['u_2_15=[0.0, 0.004, 0.008, 0.01]', 'F_2_15=[-2.0, 0.0, 0.0, 2.0]']"
+      "details": "max_abs_err=0.01, max_rel_err=500.0%, got=[0.0, 0.004, 0.008, 0.01], expected=[0.0, 0.0, 0.002, 0.0]"
     }
   }
 }

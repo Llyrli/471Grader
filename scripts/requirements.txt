@@ -4,7 +4,8 @@
 # Python >= 3.10 required
 
 # --- Core ---
-anthropic>=0.39.0        # Claude API client (Messages + Batch API)
+anthropic>=0.39.0        # Claude API client (used by batch_score.py)
+openai>=1.0.0            # OpenAI-compatible client (used by score_notebooks.py)
 PyYAML>=6.0              # Rubric YAML parsing
 jsonschema>=4.20.0       # Schema validation for Rubric and IR
 

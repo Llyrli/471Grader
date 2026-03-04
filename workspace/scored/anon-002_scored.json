@@ -1,29 +1,35 @@
 {
-  "student_id": "anon-002",
-  "scored_at": "2026-03-03T10:11:43.446451+00:00",
-  "execution_status": "success",
+  "Q1_result_score": 3,
+  "Q1_process_score": 7,
   "Q1_score": 10,
+  "Q2_result_score": 3,
+  "Q2_process_score": 7,
   "Q2_score": 10,
+  "Q3_result_score": 3,
+  "Q3_process_score": 7,
   "Q3_score": 10,
   "final_score": 30,
   "feedback": {
-    "Q1": "Feedback unavailable.",
-    "Q2": "Feedback unavailable.",
-    "Q3": "Feedback unavailable.",
-    "overall": "Feedback unavailable."
+    "Q1": "The result is correct and the process is sound. The student correctly set up the global stiffness matrix, applied boundary conditions, and solved for the displacements and forces in each spring.",
+    "Q2": "The result is correct and the process is sound. The student correctly set up the global stiffness matrix, applied boundary conditions, and solved for the displacements and forces in each spring.",
+    "Q3": "The result is correct and the process is sound. The student correctly set up the global stiffness matrix, applied boundary conditions, and solved for the displacements and forces in each spring.",
+    "overall": "The student's implementation is technically correct and follows the finite element method (FEM) steps accurately for all three questions. The code is well-structured and the final results are correct, demonstrating a strong understanding of the material."
   },
+  "student_id": "anon-002",
+  "scored_at": "2026-03-03T14:32:07.221229+00:00",
+  "execution_status": "success",
   "autograde_detail": {
     "Q1": {
       "passed": true,
-      "details": "u=[0.0, 0.5, 1.0]"
+      "details": "max_abs_err=0"
     },
     "Q2": {
       "passed": true,
-      "details": "u=[0.0, 0.015, 0.02]"
+      "details": "max_abs_err=0"
     },
     "Q3": {
       "passed": true,
-      "details": "u=[0.0, 0.0, 0.002, 0.0]"
+      "details": "max_abs_err=0"
     }
   }
 }

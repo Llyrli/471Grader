@@ -1,0 +1,19 @@
+This homework is about implementing a simple 1D finite element solver for an axially loaded bar.
+
+The total score for the homework is 30 points. There are three questions (Q1, Q2, Q3), and each question is worth 10 points.
+
+For each question:
+- 3 points are assigned for numerical correctness (checked automatically).
+- 7 points are assigned for the quality and correctness of the finite element implementation process.
+
+The bar has given material properties (Young’s modulus E and cross-sectional area A). One end is fixed, and an external axial force is applied at the other end. The bar is discretized into a small number of linear 1D elements (for example, two elements).
+
+In Q1, students are required to construct the full finite element solution pipeline. This includes defining the mesh and degrees of freedom, forming the element stiffness matrix for a linear 1D bar element, assembling the global stiffness matrix, applying boundary conditions correctly, and solving the linear system to compute nodal displacements. The key output is the displacement at the loaded end.
+
+In Q2, students should compute strain and stress in each element using the displacement solution from Q1. They must correctly compute strain from nodal displacements and then compute stress using Hooke’s law.
+
+In Q3, students should compute the reaction force at the fixed boundary. The reaction force should satisfy global equilibrium and be physically consistent with the applied load.
+
+For the 7 process points in each question, we will evaluate whether the student’s finite element procedure is logically correct and mathematically sound. This includes correct element formulation, correct assembly, correct boundary condition treatment, proper solution of the linear system, and correct post-processing. Partial credit should be awarded when the core finite element logic is correct but minor implementation mistakes lead to incorrect final results.
+
+We do not require a specific coding style. Different implementations are acceptable as long as the finite element method is implemented correctly and reflects proper physical reasoning.
