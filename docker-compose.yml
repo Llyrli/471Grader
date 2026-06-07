@@ -1,0 +1,51 @@
+# JN Grader — convenience compose file.
+#
+# Builds the grader image and mounts ./workspace so results land on the host.
+# The LLM_API_KEY is read from your shell env (needed only for the scoring stage).
+#
+# Examples:
+#   docker compose run --rm grader python scripts/preprocess.py workspace/raw --output workspace/processed
+#   LLM_API_KEY=xxx docker compose run --rm grader \
+#       python scripts/score_notebooks.py workspace/processed --output workspace/scored \
+#       --reference workspace/correct_sample.ipynb
+#   docker compose run --rm grader python scripts/report.py workspace/scored --output workspace/reports
+#
+# Task bank (Postgres + pgvector) — bring the DB up, then ingest/query:
+#   docker compose up -d db
+#   docker compose run --rm grader python scripts/db_ingest.py --key ME471-HW2 ...
+#   docker compose run --rm grader python scripts/db_query.py stats --key ME471-HW2
+services:
+  grader:
+    build: .
+    image: jn-grader
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}   # for --provider anthropic
+      - MPLBACKEND=Agg
+      - DATABASE_URL=postgresql://grader:grader@db:5432/jngrader
+    volumes:
+      - ./workspace:/app/workspace
+      - ./datasets:/app/datasets        # assignment inputs (rw: gen_config writes config.yaml here)
+    # DB is optional — bring it up with `docker compose up -d db` before
+    # running db_ingest.py / db_query.py. Grading stages don't need it.
+    # Drop privileges / capabilities — student code is untrusted.
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=grader
+      - POSTGRES_PASSWORD=grader
+      - POSTGRES_DB=jngrader
+    volumes:
+      - jngrader_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grader -d jngrader"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  jngrader_pgdata:

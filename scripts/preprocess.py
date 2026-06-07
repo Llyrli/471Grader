@@ -134,15 +134,26 @@ def execute_notebook(file_path: Path) -> tuple[str, dict | None]:
 # Autograde test integration
 # ---------------------------------------------------------------------------
 
-def run_autograde_tests(file_path: Path) -> dict[str, Any]:
+def run_autograde_tests(
+    file_path: Path,
+    reference: Path | None = None,
+    config: Path | None = None,
+) -> dict[str, Any]:
     """Run autograde tests via scripts/run_tests.py.
 
-    Returns dict with Q1/Q2/Q3 pass/fail results.
+    Returns dict with per-question pass/fail results. ``reference`` enables the
+    reference oracle (derive expected answers by executing it); ``config`` selects
+    a per-assignment config.yaml (question markers, tolerance, ...).
     """
     run_tests_script = Path(__file__).parent / "run_tests.py"
+    cmd = [sys.executable, str(run_tests_script), str(file_path)]
+    if reference is not None:
+        cmd += ["--reference", str(reference)]
+    if config is not None:
+        cmd += ["--config", str(config)]
     try:
         result = subprocess.run(
-            [sys.executable, str(run_tests_script), str(file_path)],
+            cmd,
             capture_output=True,
             text=True,
             timeout=120,
@@ -268,6 +279,8 @@ def _timed(func, *args, **kwargs) -> tuple[Any, int]:
 def process_ipynb_file(
     file_path: Path,
     student_id: str,
+    reference: Path | None = None,
+    config: Path | None = None,
 ) -> dict[str, Any] | None:
     """Process a single .ipynb file into an IR dict."""
     ctx = ProcessingContext()
@@ -293,7 +306,7 @@ def process_ipynb_file(
     logger.info("  Execution: %s", exec_status)
 
     # Step 3: Autograde tests (always run — uses exec()+Agg, independent of nbclient)
-    autograde, dur = _timed(run_autograde_tests, file_path)
+    autograde, dur = _timed(run_autograde_tests, file_path, reference, config)
     ctx.add_log("autograde_tests", "success", duration_ms=dur)
 
     # Step 4: Build IR
@@ -327,7 +340,8 @@ def collect_files(input_dir: Path) -> list[Path]:
     )
 
 
-def run_batch(input_dir: Path, output_dir: Path) -> None:
+def run_batch(input_dir: Path, output_dir: Path, reference: Path | None = None,
+              config: Path | None = None) -> None:
     """Preprocess all .ipynb files in input_dir, write IR to output_dir."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -345,7 +359,7 @@ def run_batch(input_dir: Path, output_dir: Path) -> None:
         logger.info("[%d/%d] Processing %s → %s",
                     idx, len(files), file_path.name, student_id)
 
-        ir = process_ipynb_file(file_path, student_id)
+        ir = process_ipynb_file(file_path, student_id, reference, config)
 
         if ir is not None:
             out_path = output_dir / f"{student_id}.json"
@@ -379,6 +393,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", "-o", type=Path, required=True,
                         dest="output_dir",
                         help="Directory to write IR JSON files")
+    parser.add_argument("--reference", "-r", type=Path, default=None,
+                        help="Reference .ipynb — execute it to derive expected "
+                             "answers (reference oracle) instead of hardcoded constants")
+    parser.add_argument("--config", "-c", type=Path, default=None,
+                        help="Per-assignment config.yaml (question markers, tolerance, ...)")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Enable debug-level logging")
     return parser.parse_args(argv)
@@ -400,7 +419,8 @@ def main(argv: list[str] | None = None) -> None:
         logger.error("Input directory does not exist: %s", args.input_dir)
         raise SystemExit(1)
 
-    run_batch(input_dir=args.input_dir, output_dir=args.output_dir)
+    run_batch(input_dir=args.input_dir, output_dir=args.output_dir,
+              reference=args.reference, config=args.config)
 
 
 if __name__ == "__main__":

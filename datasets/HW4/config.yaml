@@ -1,0 +1,24 @@
+# ME471-HW4 — generated from description.txt by gen_config.py.
+# REVIEW before grading: check points, type (llm/link), and desc.
+assignment: ME471-HW4
+max_score: 50
+criteria:
+- 'Explanation & interpretation: the student should explain their approach in markdown between code cells
+  (what each step computes and why), at a level comparable to the reference solution. Within each problem''s
+  points, reward clear interpretation and deduct for code with little or no explanation, even when the
+  numbers are correct.'
+problems:
+- name: P1
+  points: 10
+  type: link
+  desc: Read ex_3_7.txt and submit the link to the chat.
+- name: P2
+  points: 20
+  type: llm
+  desc: 'Solve 2D and 3D truss analysis using numpy: (a) find cross-sectional area A and second moment
+    of area I for factor of safety 2.5 against yielding and buckling; (b) plot the deflected shape; (c)
+    repeat for Figure P3-71 using a Truss3D class inheriting Spring2D.'
+- name: P3
+  points: 20
+  type: llm
+  desc: Solve Problem 1 using OpenSeesPy and submit as a jupyter notebook with markdowns.

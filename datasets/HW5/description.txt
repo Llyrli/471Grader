@@ -1,0 +1,12 @@
+TODO: paste the HW5 problem statement here.
+Problem 1: Sample code comprehension (10 pts): 
+Use p3_60_part.txt. Complete the missing part of the code. Submit the link to the 
+chat. 
+Problem 2: Additional topics about truss structures (20 pts) 
+Using numpy or sympy (without OpenseesPy), solve problems 3.53 and 3.58 of the 
+textbook. Submit the solution as jupyter notebooks with markdowns. 
+Problem 3: Weighted residual methods (20 pts) 
+Solve Problem 3.60 of the textbook. Submit the solution as jupyter notebooks with 
+markdowns. For collocation method and subdomain method, select points and 
+subdomains by the approach described in Section 3.13. Hint: You can use sympy to 
+simplify the problem.

@@ -1,0 +1,19 @@
+Problem 1: Sample code comprehension (10 pts): 
+Use ex_3_7.txt. Submit the link to the chat.
+Problem 2: 2D & 3D truss analysis using Python (20 pts)
+Using numpy (without OpenseesPy), solve the following problems. Submit the solution 
+as jupyter notebooks with markdowns.
+(a) For the structure shown in Figure P3-63, identify the cross-sectional area, 𝐴, and 
+second moment of area, 𝐼, needed to realize the factor of safety of 2.5 for both the 
+yielding and the buckling. Assume that the yield strength of the steel is 250MPa and 
+the elastic modulus is 210GPa. Use Euler’s formula to get critical buckling load: Euler's 
+Column Formula (engineeringtoolbox.com).
+(b) Plot the deflected shape of the structure. You should amplify the deformation so that 
+it is visible in the figure.
+(c) Repeat (a)-(b) for the structure shown in Figure P3-71 (use factor of safety of 2.5, 
+instead of 2.0 indicated in the figure caption). In your Python code, create Truss3D 
+class by inheriting Spring2D class discussed in class, and use that class to solve the 
+problem.
+Problem 3: 2D & 3D truss analysis using OpenSeesPy (20pts)
+Using OpenSeesPy, solve Problem 1. Submit the solution as jupyter notebooks with 
+markdowns.

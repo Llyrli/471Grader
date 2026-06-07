@@ -1,0 +1,26 @@
+# Secrets — never commit API keys
+.env
+.env.*
+!.env.example
+
+# Not published
+SKILL.md
+architecture.md
+README copy.md
+* copy.md
+*.bak
+
+# OS / editor cruft
+.DS_Store
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Student data & generated outputs — do NOT publish to GitHub.
+# (kept under datasets/<assignment>/: config.yaml, description.txt, reference.ipynb)
+workspace/
+datasets/*/submissions/

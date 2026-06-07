@@ -1,0 +1,33 @@
+# ME471 HW3 — graded by score_general.py (reference-grounded LLM grader).
+# Not the FEM autograder schema; this uses `problems:` (per-problem points/type).
+assignment: ME471-HW3
+max_score: 65
+# Cross-cutting criteria applied to every problem's score (in addition to
+# numeric correctness vs. the reference).
+criteria:
+  - >
+    Explanation & interpretation: the student should explain their approach in
+    markdown between code cells (what each step computes and why), at a level
+    comparable to the reference solution. Within each problem's points, reward
+    clear interpretation and deduct for code with little or no explanation, even
+    when the numbers are correct.
+problems:
+  - name: P1
+    points: 10
+    type: link          # full marks if a URL is present in the submission
+  - name: P2
+    points: 20
+    type: llm
+    desc: >
+      Vectors & coordinate systems: (a) check e1,e2,e3 are an orthonormal basis
+      (magnitudes & dot products); (b) express e1,e2,e3 in local AND global
+      components; (c) express g1,g2,g3 in local AND global components;
+      (d) vector v = 0.5g1+1.0g2+1.5g3 in local AND global components.
+  - name: P3
+    points: 35
+    type: llm
+    desc: >
+      Tensors: (a)-(d) express the identity tensor T (T v = v) as a matrix when
+      input/output are measured in global/local/mixed bases; (e) tensor T' that
+      doubles the e2-direction, in the local basis; (f) T' in the global basis;
+      (g) apply T' to v from 1(d), in global components.

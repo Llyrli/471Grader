@@ -1,0 +1,56 @@
+TODO: paste the HW3 problem statement here.
+Problem 1: Sample code comprehension (10 pts): 
+Use ex_2_5.txt. Submit the link to the chat. 
+Problem 2: Vectors and coordinate systems (20 pts) 
+Let {𝒈௜ }௜ୀଵ ,ଶ ,ଷ
+, or 𝒈ଵ ,𝒈ଶ ,𝒈ଷ , be the unit orthogonal basis vectors of the global 
+coordinate system. Now, we define the new local coordinate system using the basis 
+vectors {𝒆௜ }௜ୀଵ ,ଶ ,ଷ
+, or 𝒆ଵ , 𝒆ଶ , 𝒆ଷ , as follows: 
+𝒆ଵ = −0.41166073𝒈ଵ − 0.46269725𝒈ଶ + 0.78514119𝒈ଷ
+𝒆ଶ = −0.0485159𝒈ଵ − 0.8491783𝒈ଶ − 0.52587301𝒈ଷ
+𝒆ଷ = 0.91004486𝒈ଵ − 0.2545731𝒈ଶ + 0.32712518𝒈ଷ
+Answer the following questions, and submit the solution as jupyter notebooks with 
+markdowns. 
+(a) Check that the basis vectors for the local coordinate system, 𝒆ଵ , 𝒆ଶ , 𝒆ଷ , are unit 
+orthogonal basis vectors (check their magnitudes and dot products). 
+(b) Express the vectors 𝒆ଵ , 𝒆ଶ , 𝒆ଷ by components using two different coordinate 
+systems, local coordinate system ({𝒆௜ }) and global coordinate system ({𝒈௜ }). 
+(c) Express the vectors 𝒈ଵ ,𝒈ଶ ,𝒈ଷ by components using two different coordinate 
+systems, local coordinate system ({𝒆௜ }) and global coordinate system ({𝒈௜ }). 
+(d) Now, we define a new vector 𝒗 as 
+𝒗 = 0.5𝒈ଵ + 1.0𝒈ଶ + 1.5𝒈ଷ
+Express the vector 𝒗 by components using two different coordinate systems, local 
+coordinate system ({𝒆௜ }) and global coordinate system ({𝒈௜ }). 
+Problem 3: Tensors (35pts) 
+In this problem, we consider the basis vectors defined in problem 1 and a tensor 𝐓
+that does not change the original vector (remember that the tensor is an object that 
+operates on a vector to produce another vector). In other words, for any vector 𝒗, 
+𝒗 = 𝐓𝒗
+Answer the following questions, and submit the solution as jupyter notebooks with 
+markdowns. 
+(a) Express the tensor 𝐓 by components (matrix) if we measure both the input and 
+output of the tensor operations using the global coordinate system {𝒈௜ }. 
+(b) Express the tensor 𝐓 by components (matrix) if we measure the input and output 
+of the tensor operations using the local coordinate system {𝒆௜ }. 
+(c) Express the tensor 𝐓 by components (matrix) if we measure the input by the 
+global coordinate system {𝒈௜ }, and measure the output by the local coordinate system 
+{𝒆௜ }. 
+(d) Express the tensor 𝐓 by components (matrix) if we measure the input by the local 
+coordinate system {𝒆௜ }, and measure the output by the global coordinate system 
+{𝒈௜ }. 
+(e) Now, we define a new tensor 𝐓′ that doubles the magnitude of the vector in the 
+direction 𝒆𝟐. In other words, 
+𝒆ଵ = 𝐓
+ᇱ 𝒆ଵ
+2𝒆ଶ = 𝐓
+ᇱ 𝒆𝟐
+𝒆ଷ = 𝐓
+ᇱ 𝒆ଷ
+Express the tensor 𝐓′ by components (matrix) if we measure both the input and 
+output by the local coordinate system {𝒆௜ }. 
+(f) Express the tensor 𝐓′ by components (matrix) if we measure both the input and 
+output by the global coordinate system {𝒈௜ }. 
+(g) Apply the tensor to the vector 𝒗 defined in problem 1(d), and express the results 
+by components using global coordinate system {𝒈௜ }. 
+ 

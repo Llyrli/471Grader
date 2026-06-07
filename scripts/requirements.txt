@@ -19,8 +19,13 @@ scipy>=1.11.0            # Cohen's kappa, Spearman rho, distribution tests
 # --- Utilities ---
 tqdm>=4.66.0             # Progress bars for batch processing
 
+# --- Task bank (Postgres + pgvector) ---
+psycopg[binary]>=3.1   # Postgres client for db_ingest.py / db_query.py
+
 # --- Notebook support ---
 nbformat>=5.7.0          # Jupyter notebook parsing
 nbclient>=0.9.0          # Jupyter notebook execution
 jupyter>=1.0.0           # Jupyter kernel (provides python3 kernel)
+numpy>=1.24.0            # Array comparison in run_tests.py autograde
+matplotlib>=3.7.0        # Required by run_tests.py (Agg backend) and FE notebooks
 pytest>=7.0.0            # Autograde test runner

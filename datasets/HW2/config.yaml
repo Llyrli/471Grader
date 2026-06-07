@@ -1,0 +1,19 @@
+# Per-assignment autograde config — ME471 HW2 (problems 2.8 / 2.11 / 2.15).
+#
+# Used by: run_tests.py / preprocess.py via --config datasets/HW2/config.yaml
+#   - marker:     how each question is labeled in STUDENT notebooks (cell location)
+#   - ref_marker: section header in the REFERENCE (underscore form; avoids the
+#                 dotted "2.8" in a title cell)
+# Expected answers come from the reference oracle (--reference); the `expected`
+# block below is the fallback used when no --reference is given.
+questions:
+  - {name: Q1, marker: '2[._]8\b|problem.{0,5}2\.8',   ref_marker: '2_8\b'}
+  - {name: Q2, marker: '2[._]11\b|problem.{0,5}2\.11', ref_marker: '2_11\b'}
+  - {name: Q3, marker: '2[._]15\b|problem.{0,5}2\.15', ref_marker: '2_15\b'}
+rtol: 0.02
+atol: 1.0e-8
+answer_var: u
+expected:
+  Q1: [0.0, 0.5, 1.0]
+  Q2: [0.0, 0.015, 0.02]
+  Q3: [0.0, 0.0, 0.002, 0.0]

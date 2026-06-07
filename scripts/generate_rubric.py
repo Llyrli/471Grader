@@ -22,7 +22,8 @@ import sys
 from pathlib import Path
 
 import yaml
-from openai import OpenAI
+
+from llm_client import DEFAULT_ANTHROPIC_MODEL, LLMClient
 
 logger = logging.getLogger("generate_rubric")
 
@@ -83,6 +84,9 @@ Your rubric must:
     * solver
     * post-processing
     * physical consistency
+- Include a criterion for EXPLANATION / INTERPRETATION: whether the student
+  explains their approach in markdown between code cells (what each step computes
+  and why), not just raw code. Give it a small weight within each question.
 - Allow partial credit based on conceptual correctness.
 
 ==================================================
@@ -166,19 +170,10 @@ def validate_rubric(rubric: dict) -> list[str]:
 
 def generate_rubric(
     description: str,
-    client: OpenAI,
-    model: str,
+    client: LLMClient,
 ) -> dict:
     """Call LLM with the assignment description and return parsed rubric dict."""
-    response = client.chat.completions.create(
-        model=model,
-        max_tokens=2048,
-        messages=[
-            {"role": "system", "content": RUBRIC_SYSTEM_PROMPT},
-            {"role": "user",   "content": description},
-        ],
-    )
-    raw = response.choices[0].message.content.strip()
+    raw = client.complete(RUBRIC_SYSTEM_PROMPT, description, max_tokens=2048).strip()
 
     # Strip accidental markdown fences
     if raw.startswith("```"):
@@ -202,12 +197,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Text file containing the assignment description")
     parser.add_argument("--output", "-o", type=Path, required=True,
                         help="Output path for the generated rubric.yaml")
+    parser.add_argument("--provider", choices=["openai", "anthropic"], default="openai",
+                        help="LLM provider: 'anthropic' for Claude (native SDK), "
+                             "'openai' for OpenAI-compatible endpoints (default)")
     parser.add_argument("--api-key", type=str, default=None,
-                        help="API key (overrides LLM_API_KEY env var)")
+                        help="API key (overrides LLM_API_KEY / ANTHROPIC_API_KEY env vars)")
     parser.add_argument("--base-url", type=str, default=DEFAULT_BASE_URL,
-                        help=f"OpenAI-compatible base URL (default: {DEFAULT_BASE_URL})")
-    parser.add_argument("--model", type=str, default=DEFAULT_MODEL,
-                        help=f"Model name (default: {DEFAULT_MODEL})")
+                        help=f"OpenAI-compatible base URL (openai provider only; "
+                             f"default: {DEFAULT_BASE_URL})")
+    parser.add_argument("--model", type=str, default=None,
+                        help=f"Model name (default: {DEFAULT_MODEL} for openai, "
+                             f"{DEFAULT_ANTHROPIC_MODEL} for anthropic)")
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser.parse_args(argv)
 
@@ -225,17 +225,27 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(1)
 
     api_key = args.api_key or os.environ.get("LLM_API_KEY")
+    if args.provider == "anthropic":
+        api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        logger.error("No API key. Pass --api-key or set LLM_API_KEY.")
+        logger.error(
+            "No API key. Pass --api-key, or set LLM_API_KEY "
+            "(or ANTHROPIC_API_KEY when --provider anthropic)."
+        )
         raise SystemExit(1)
 
+    model = args.model or (
+        DEFAULT_ANTHROPIC_MODEL if args.provider == "anthropic" else DEFAULT_MODEL
+    )
     description = args.description_file.read_text(encoding="utf-8")
     logger.info("Loaded description: %d chars", len(description))
 
-    client = OpenAI(api_key=api_key, base_url=args.base_url)
-    logger.info("Calling LLM (%s) …", args.model)
+    client = LLMClient(
+        provider=args.provider, api_key=api_key, base_url=args.base_url, model=model
+    )
+    logger.info("Calling LLM (provider=%s, model=%s) …", args.provider, model)
 
-    rubric = generate_rubric(description, client, args.model)
+    rubric = generate_rubric(description, client)
 
     # Validate
     errors = validate_rubric(rubric)

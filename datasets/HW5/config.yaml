@@ -1,0 +1,17 @@
+# ME471 HW5 — graded by score_general.py (reference-grounded LLM grader).
+# FILL IN: max_score, and each problem's points / desc.
+assignment: ME471-HW5
+max_score: 100            # <-- set to the real total
+criteria:
+  - >
+    Explanation & interpretation: the student should explain their approach in
+    markdown between code cells (what each step computes and why), at a level
+    comparable to the reference solution. Within each problem's points, reward
+    clear interpretation and deduct for code with little or no explanation, even
+    when the numbers are correct.
+problems:
+  # type: llm  -> graded by the model against the reference
+  # type: link -> full marks if a URL is present in the submission
+  - {name: P1, points: 0, type: llm, desc: "TODO: what problem 1 asks"}
+  - {name: P2, points: 0, type: llm, desc: "TODO: what problem 2 asks"}
+  - {name: P3, points: 0, type: llm, desc: "TODO: what problem 3 asks"}
