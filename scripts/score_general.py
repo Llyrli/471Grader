@@ -162,11 +162,35 @@ def grade_student(
         f"---\n[GRADING TASK]\nScore these problems:\n" + "\n".join(task_lines)
     )
     raw = client.complete(SYSTEM_PROMPT, user, max_tokens=1500)
+    try:
+        return _extract_json(raw)
+    except json.JSONDecodeError:
+        # One stricter retry before giving up — malformed JSON is the usual cause.
+        raw = client.complete(
+            SYSTEM_PROMPT,
+            user + "\n\nIMPORTANT: return STRICT valid JSON only — no prose, no "
+                   "markdown fences, no trailing commas.",
+            max_tokens=1500,
+        )
+        return _extract_json(raw)
+
+
+def _extract_json(raw: str) -> dict[str, Any]:
+    """Parse the model's JSON, tolerating markdown fences and surrounding prose."""
+    raw = raw.strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
-    return json.loads(raw.strip())
+    raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # Salvage the outermost {...} object if the model wrapped it in text.
+        i, j = raw.find("{"), raw.rfind("}")
+        if i != -1 and j > i:
+            return json.loads(raw[i:j + 1])
+        raise
 
 
 def score_one(
@@ -186,6 +210,7 @@ def score_one(
 
     # LLM grades the non-link problems.
     llm_result: dict[str, Any] = {}
+    llm_failed = False
     if llm_problems:
         try:
             llm_result = grade_student(client, description, ref_text, ref_answers,
@@ -194,6 +219,7 @@ def score_one(
         except Exception as exc:
             logger.warning("  LLM failed for %s: %s", student_id, exc)
             llm_result = {"overall": f"LLM grading failed: {exc}"}
+            llm_failed = True
 
     has_link = bool(URL_RE.search(student_text))
     problems_out = []
@@ -213,6 +239,19 @@ def score_one(
         feedback[name] = fb
     feedback["overall"] = llm_result.get("overall", "")
 
+    # Selective grading: abstain rather than emit a low-trust score when the LLM
+    # call failed / was unparseable, or a graded problem is missing from the
+    # result (garbled output) — these are exactly the records a 0-by-fallback
+    # would otherwise hide. Routed to the human-review queue by run().
+    review_reasons: list[str] = []
+    if llm_failed:
+        review_reasons.append("llm_failed")
+    else:
+        missing = [p["name"] for p in llm_problems
+                   if not isinstance(llm_result.get(p["name"]), dict)]
+        if missing:
+            review_reasons.append("missing_problem_scores:" + ",".join(missing))
+
     ident = extract_identity(nb_path.name, student_text)
     return {
         "student_id": student_id,
@@ -225,6 +264,8 @@ def score_one(
         "final_score": final,
         "problems": problems_out,
         "feedback": feedback,
+        "status": "ABSTAIN" if review_reasons else "AUTO",
+        "review_reasons": review_reasons,
     }
 
 
@@ -250,8 +291,11 @@ def run(args) -> None:
         if memory_block:
             logger.info("Program memory loaded: %s", args.memory_path)
 
+    review_dir = args.review_dir or (args.output.parent / "review_queue")
+
     files = sorted(p for p in args.submissions.iterdir() if p.suffix.lower() == ".ipynb")
     logger.info("Grading %d submission(s) with %s (%s) …", len(files), model, args.provider)
+    abstained = 0
     for idx, nb_path in enumerate(files, 1):
         sid = f"anon-{idx:03d}"
         try:
@@ -262,8 +306,17 @@ def run(args) -> None:
             continue
         out = args.output / f"{sid}_scored.json"
         out.write_text(json.dumps(scored, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info("  → %s  %d/%d", out.name, scored["final_score"], scored["max_score"])
+        if scored.get("status") == "ABSTAIN":
+            abstained += 1
+            review_dir.mkdir(parents=True, exist_ok=True)
+            (review_dir / f"{sid}_scored.json").write_text(
+                json.dumps(scored, ensure_ascii=False, indent=2), encoding="utf-8")
+        flag = "" if scored.get("status") != "ABSTAIN" else \
+            f"  ⚑ ABSTAIN ({', '.join(scored['review_reasons'])})"
+        logger.info("  → %s  %d/%d%s", out.name, scored["final_score"], scored["max_score"], flag)
     logger.info("Done. Results in %s", args.output)
+    if abstained:
+        logger.info("⚑ %d submission(s) abstained → human review queue: %s", abstained, review_dir)
 
 
 def parse_args(argv=None):
@@ -272,6 +325,9 @@ def parse_args(argv=None):
     p.add_argument("--reference", type=Path, required=True)
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--description", type=Path, default=None)
+    p.add_argument("--review-queue", type=Path, default=None, dest="review_dir",
+                   help="Directory for abstained submissions routed to human review "
+                        "(default: <output>/../review_queue)")
     p.add_argument("--memory", type=Path, default=None, dest="memory_path",
                    help="Course program-memory store (program_memory.py); injects "
                         "course conventions + common error patterns as advisory priors")

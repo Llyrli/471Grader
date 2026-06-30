@@ -116,7 +116,7 @@ def build_stage_cmd(stage: str, engine: str, p: Paths, opts: argparse.Namespace)
         if stage == "score":
             cmd = [py, str(SCRIPTS / "score_general.py"), str(p.submissions),
                    "--reference", str(p.reference), "--config", str(p.config),
-                   "--output", str(p.scored)]
+                   "--output", str(p.scored), "--review-queue", str(p.review_queue)]
             if p.description.exists():
                 cmd += ["--description", str(p.description)]
             if opts.memory:
