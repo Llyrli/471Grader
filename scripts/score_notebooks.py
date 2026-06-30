@@ -559,12 +559,14 @@ def run_batch(
             logger.warning("Rubric could not be loaded — grading without rubric.")
 
     # Optional course program memory (sedimented conventions + error patterns).
+    # The reference solution is the semantic query → recall the most relevant
+    # prior error patterns for this assignment (offline hash embedder by default).
     memory_block = ""
     if memory_path:
         from program_memory import load_block
-        memory_block = load_block(memory_path)
+        memory_block = load_block(memory_path, query=reference_text or None)
         if memory_block:
-            logger.info("Program memory loaded: %s", memory_path)
+            logger.info("Program memory loaded (semantic recall): %s", memory_path)
         else:
             logger.info("Program memory empty/unusable — grading without it.")
 

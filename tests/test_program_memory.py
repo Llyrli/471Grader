@@ -111,3 +111,63 @@ def test_add_convention_dedups():
     assert pm.add_convention(store, "rule A", "HW2") is True
     assert pm.add_convention(store, "rule A", "HW3") is False
     assert len(store["conventions"]) == 1
+
+
+# ---- semantic recall (similar-cause) --------------------------------------
+
+def _store_two_patterns():
+    store = pm.empty_store("ME471")
+    store["error_patterns"] = {
+        "physics_modeling::global_stiffness": {
+            "error_class": "physics_modeling", "locus": "global_stiffness", "count": 2,
+            "examples": ["global stiffness matrix assembly used wrong element stiffness"],
+            "fix_hint": "fix element stiffness in assembly"},
+        "coding::displacement": {
+            "error_class": "coding", "locus": "displacement", "count": 9,
+            "examples": ["fourier transform convolution pixel filter image"], "fix_hint": ""},
+    }
+    return store
+
+
+def test_relevant_patterns_ranks_by_semantic_similarity():
+    import embeddings
+    store = _store_two_patterns()
+    emb = embeddings.Embedder(provider="hash")
+    # Query is about assembly/stiffness → the physics pattern wins despite the
+    # coding pattern being globally more frequent (count 9 vs 2).
+    out = pm.relevant_patterns(store, "stiffness matrix assembly element boundary", emb, top_k=2)
+    assert out[0]["error_class"] == "physics_modeling"
+
+
+def test_format_block_semantic_header_and_order():
+    import embeddings
+    store = _store_two_patterns()
+    emb = embeddings.Embedder(provider="hash")
+    block = pm.format_memory_block(store, query="assembly stiffness element", embedder=emb)
+    assert "most relevant to this assignment" in block
+    assert block.index("global_stiffness") < block.index("displacement")
+
+
+def test_load_block_without_query_uses_frequency(tmp_path):
+    store = _store_two_patterns()
+    p = tmp_path / "m.json"
+    pm.save_store(p, store)
+    block = pm.load_block(p)  # no query → frequency: coding(9) before physics(2)
+    assert "most common first" in block
+    assert block.index("displacement") < block.index("global_stiffness")
+
+
+def test_load_block_with_query_uses_semantic(tmp_path):
+    store = _store_two_patterns()
+    p = tmp_path / "m.json"
+    pm.save_store(p, store)
+    block = pm.load_block(p, query="stiffness assembly element matrix")
+    assert "most relevant to this assignment" in block
+    assert block.index("global_stiffness") < block.index("displacement")
+
+
+def test_pattern_text_concatenates_fields():
+    p = {"error_class": "coding", "locus": "displacement", "fix_hint": "fix x",
+         "examples": ["e1", "e2"]}
+    t = pm.pattern_text(p)
+    assert "coding" in t and "displacement" in t and "fix x" in t and "e1" in t

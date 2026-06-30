@@ -287,9 +287,11 @@ def run(args) -> None:
     memory_block = ""
     if getattr(args, "memory_path", None):
         from program_memory import load_block
-        memory_block = load_block(args.memory_path)
+        # Use the assignment description as the query → semantic "similar-cause"
+        # recall of the most relevant prior error patterns (offline hash embedder).
+        memory_block = load_block(args.memory_path, query=description or None)
         if memory_block:
-            logger.info("Program memory loaded: %s", args.memory_path)
+            logger.info("Program memory loaded (semantic recall): %s", args.memory_path)
 
     review_dir = args.review_dir or (args.output.parent / "review_queue")
 

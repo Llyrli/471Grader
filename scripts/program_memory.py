@@ -270,20 +270,60 @@ def ranked_patterns(store: dict[str, Any], top_k: int, min_count: int = MIN_PATT
     return pats[:top_k]
 
 
+def pattern_text(p: dict) -> str:
+    """Text used to embed/match an error pattern for semantic recall."""
+    parts = [p.get("error_class", ""), p.get("locus") or "", p.get("fix_hint", "")]
+    parts += p.get("examples", []) or []
+    return " ".join(x for x in parts if x)
+
+
+def relevant_patterns(
+    store: dict[str, Any],
+    query: str,
+    embedder: Any,
+    top_k: int,
+    min_count: int = MIN_PATTERN_COUNT,
+) -> list[dict]:
+    """Error patterns most SEMANTICALLY similar to `query` (e.g. the current
+    assignment's description / reference), via cosine over embeddings.
+
+    Cross-assignment "similar-cause" recall: instead of only the globally most
+    frequent patterns, surface the ones whose error text matches what THIS
+    assignment is about. Ties broken by frequency. Built once per grading batch,
+    so embedding N patterns is cheap (and free with the offline `hash` embedder).
+    """
+    from embeddings import cosine
+    pats = [p for p in store.get("error_patterns", {}).values() if p.get("count", 0) >= min_count]
+    if not pats:
+        return []
+    qv = embedder.embed_one(query or "")
+    texts = [pattern_text(p) for p in pats]
+    vecs = embedder.embed(texts)
+    scored = [(cosine(qv, v), p.get("count", 0), p) for v, p in zip(vecs, pats)]
+    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return [p for _, _, p in scored[:top_k]]
+
+
 def format_memory_block(
     store: dict[str, Any],
     top_patterns: int = DEFAULT_TOP_PATTERNS,
     top_conventions: int = DEFAULT_TOP_CONVENTIONS,
     min_count: int = MIN_PATTERN_COUNT,
+    query: str | None = None,
+    embedder: Any = None,
 ) -> str:
-    """Render a compact, frequency-ranked memory block for prompt injection.
+    """Render a compact memory block for prompt injection.
 
-    Returns "" when the store has nothing actionable, so callers can cheaply skip
-    injection. The block is explicitly framed as advisory priors that must not
-    override deterministic execution findings.
+    Patterns are ranked by FREQUENCY by default, or by SEMANTIC RELEVANCE to
+    `query` when both `query` and `embedder` are given (cross-assignment
+    similar-cause recall). Returns "" when the store has nothing actionable.
+    The block is framed as advisory priors that must not override deterministic
+    execution findings.
     """
     convs = store.get("conventions", [])[:top_conventions]
-    pats = ranked_patterns(store, top_patterns, min_count)
+    semantic = bool(query and embedder)
+    pats = (relevant_patterns(store, query, embedder, top_patterns, min_count)
+            if semantic else ranked_patterns(store, top_patterns, min_count))
     if not convs and not pats:
         return ""
 
@@ -300,7 +340,9 @@ def format_memory_block(
         for c in convs:
             lines.append(f"  - {c.get('text')}")
     if pats:
-        lines.append("\nFrequent error patterns in this course (most common first):")
+        header = ("\nError patterns most relevant to this assignment:" if semantic
+                  else "\nFrequent error patterns in this course (most common first):")
+        lines.append(header)
         for p in pats:
             locus = p.get("locus") or "unlocated"
             head = f"  - [{p.get('error_class')} @ {locus}] seen {p.get('count')}×"
@@ -313,9 +355,22 @@ def format_memory_block(
     return "\n".join(lines)
 
 
-def load_block(store_path: Path | None, **kw) -> str:
+def load_block(
+    store_path: Path | None,
+    query: str | None = None,
+    embed_provider: str = "hash",
+    embed_model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    **kw,
+) -> str:
     """Convenience for graders: load a store file and format its block; returns
-    "" if the path is None/missing/empty. Never raises on a bad store."""
+    "" if the path is None/missing/empty. Never raises on a bad store.
+
+    When `query` is given, patterns are ranked by SEMANTIC RELEVANCE to it
+    (cross-assignment similar-cause recall) using `embed_provider` (default the
+    offline `hash` embedder, so it works with no API). Falls back to frequency
+    ranking if the embedder can't be built."""
     if not store_path:
         return ""
     try:
@@ -323,7 +378,15 @@ def load_block(store_path: Path | None, **kw) -> str:
             logger.warning("memory store not found: %s — grading without memory", store_path)
             return ""
         store = load_store(Path(store_path))
-        return format_memory_block(store, **kw)
+        embedder = None
+        if query:
+            try:
+                from embeddings import Embedder
+                embedder = Embedder(provider=embed_provider, model=embed_model,
+                                    api_key=api_key, base_url=base_url)
+            except Exception as exc:
+                logger.warning("memory embedder unavailable (%s) — frequency ranking", exc)
+        return format_memory_block(store, query=query, embedder=embedder, **kw)
     except Exception as exc:
         logger.warning("could not load memory store %s: %s — grading without memory", store_path, exc)
         return ""
@@ -381,6 +444,8 @@ def _cmd_show(args: argparse.Namespace) -> None:
     store = load_store(args.store)
     print(f"Course: {store.get('course')}   updated: {store.get('updated_at')}")
     print(f"Sources: {', '.join(store.get('sources', [])) or '(none)'}")
+    if getattr(args, "query", None):
+        print(f"Semantic query: {args.query!r}  (embedder: {args.embed_provider})")
     print(f"Collected: {len(store.get('error_patterns', {}))} error pattern(s), "
           f"{len(store.get('conventions', []))} convention(s), "
           f"{len(store.get('problem_notes', {}))} problem-note group(s)")
@@ -393,7 +458,8 @@ def _cmd_show(args: argparse.Namespace) -> None:
             print(f"  - {key}: {n.get('count')} deduction(s) below max {n.get('max')}")
 
     print("\n--- injected block preview ---\n")
-    block = format_memory_block(store)
+    block = load_block(args.store, query=getattr(args, "query", None),
+                       embed_provider=getattr(args, "embed_provider", "hash"))
     print(block or "(empty — no conventions/patterns to inject yet; numeric-engine "
                    "diagnostics or `--distill` populate this)")
 
@@ -421,6 +487,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     sh = sub.add_parser("show", help="Print the store + the block it would inject.")
     sh.add_argument("--store", type=Path, required=True)
+    sh.add_argument("--query", default=None,
+                    help="Rank patterns by semantic relevance to this text (e.g. an "
+                         "assignment description) instead of by frequency")
+    sh.add_argument("--embed-provider", choices=["hash", "openai"], default="hash",
+                    help="Embedder for --query (default: hash, offline)")
     sh.set_defaults(func=_cmd_show)
     return p.parse_args(argv)
 
