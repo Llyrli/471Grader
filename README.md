@@ -12,8 +12,6 @@ task bank you can query across assignments.
 It is course-agnostic: nothing about a specific assignment is hard-coded — all
 assignment knowledge lives in per-assignment files you drop in.
 
-See [`architecture.md`](architecture.md) for the design and component status.
-
 ---
 
 ## Two grading engines
@@ -292,6 +290,18 @@ python scripts/score_notebooks.py workspace/HW6/processed ... \
 Re-running `sediment` on an already-folded assignment is skipped (idempotent);
 pass `--force` to re-fold after a re-grade.
 
+**Semantic "similar-cause" recall** — when grading, the patterns injected are
+ranked by **semantic relevance to the current assignment** (the general engine
+uses its description, the numeric engine its reference) rather than by raw
+frequency, so a topically-relevant pattern surfaces even if it is globally rarer.
+This reuses `embeddings.py` (offline `hash` embedder by default — no API). Preview
+it with a query:
+
+```bash
+python scripts/program_memory.py show --store workspace/memory/ME471.json \
+  --query "boundary conditions and stiffness assembly"
+```
+
 ## One-command pipeline + orchestration (Dify / n8n)
 
 `scripts/pipeline.py` chains the stages for one assignment and emits a
@@ -337,8 +347,6 @@ detectable, the original filename is kept so you can map back manually.
 
 ```
 471Grader/
-├── architecture.md                # full design + component status
-├── SKILL.md                       # entry point when driven as a Claude Code Skill
 ├── Dockerfile / docker-compose.yml# containerized run + pgvector `db` service
 ├── scripts/
 │   ├── gen_config.py              # description.txt → config.yaml (LLM)
