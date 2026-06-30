@@ -15,14 +15,103 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 
 import db_common
+
+logger = logging.getLogger("db_query")
 
 
 def _assignment_id(cur, key: str) -> int | None:
     cur.execute("SELECT id FROM assignments WHERE key = %s", (key,))
     row = cur.fetchone()
     return row[0] if row else None
+
+
+# ---------------------------------------------------------------------------
+# Semantic similarity (pgvector)
+# ---------------------------------------------------------------------------
+
+def _assignment_text(cur, aid: int) -> str:
+    """Text used to embed an assignment: title + description."""
+    cur.execute("SELECT COALESCE(title,''), COALESCE(description,'') FROM assignments WHERE id = %s", (aid,))
+    row = cur.fetchone()
+    if not row:
+        return ""
+    return f"{row[0]}\n\n{row[1]}".strip()
+
+
+def _embed_assignment(conn, embedder, aid: int) -> list[float]:
+    """Compute and persist the embedding for one assignment; return the vector."""
+    from embeddings import to_pgvector
+    with conn.cursor() as cur:
+        text = _assignment_text(cur, aid)
+        vec = embedder.embed_one(text)
+        cur.execute("UPDATE assignments SET embedding = %s::vector WHERE id = %s",
+                    (to_pgvector(vec), aid))
+    conn.commit()
+    return vec
+
+
+def cmd_embed(conn, args) -> None:
+    """Backfill assignments.embedding for one (--key) or all (--all) assignments."""
+    from embeddings import build_embedder_from_args
+    embedder = build_embedder_from_args(args)
+    with conn.cursor() as cur:
+        if args.all:
+            cur.execute("SELECT id, key FROM assignments ORDER BY created_at")
+            targets = cur.fetchall()
+        else:
+            aid = _assignment_id(cur, args.key)
+            if aid is None:
+                print(f"assignment not found: {args.key}")
+                return
+            targets = [(aid, args.key)]
+    for aid, key in targets:
+        _embed_assignment(conn, embedder, aid)
+        print(f"embedded {key} (provider={embedder.provider}, dim={embedder.dim})")
+    print(f"done: {len(targets)} assignment(s) embedded")
+
+
+def cmd_similar(conn, args) -> None:
+    """Nearest assignments to --key by cosine distance over embeddings.
+
+    If the query assignment (or others) lack an embedding, compute it on the fly
+    with the chosen provider so the command works even before a backfill.
+    """
+    from embeddings import build_embedder_from_args, to_pgvector
+    embedder = build_embedder_from_args(args)
+    with conn.cursor() as cur:
+        aid = _assignment_id(cur, args.key)
+        if aid is None:
+            print(f"assignment not found: {args.key}")
+            return
+        # Ensure every assignment has an embedding (auto-backfill missing ones).
+        cur.execute("SELECT id FROM assignments WHERE embedding IS NULL")
+        missing = [r[0] for r in cur.fetchall()]
+    for mid in missing:
+        _embed_assignment(conn, embedder, mid)
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT embedding FROM assignments WHERE id = %s", (aid,))
+        qvec = cur.fetchone()[0]
+        cur.execute(
+            """
+            SELECT key, title, 1 - (embedding <=> %s::vector) AS similarity
+            FROM assignments
+            WHERE id != %s AND embedding IS NOT NULL
+            ORDER BY embedding <=> %s::vector
+            LIMIT %s
+            """,
+            (qvec, aid, qvec, args.n),
+        )
+        rows = cur.fetchall()
+    print(f"=== assignments most similar to '{args.key}' (provider={embedder.provider}) ===")
+    if not rows:
+        print("(no other embedded assignments to compare)")
+        return
+    for key, title, sim in rows:
+        print(f"{sim:>6.3f}  {key:<16} {title or ''}")
 
 
 def cmd_list(conn, _args) -> None:
@@ -173,7 +262,22 @@ def cmd_top(conn, args) -> None:
         print(f"{sid:<12} {score:>3}  {who}")
 
 
+def _add_embed_args(sp) -> None:
+    """Shared embedding-provider flags for embed/similar."""
+    sp.add_argument("--embed-provider", choices=["hash", "openai"], default="hash",
+                    help="Embedding source: 'hash' (offline, default) or 'openai' "
+                         "(OpenAI-compatible /embeddings)")
+    sp.add_argument("--embed-model", default=None, help="Embedding model (openai provider)")
+    sp.add_argument("--embed-dim", type=int, default=1024,
+                    help="Embedding dimensionality (must match vector(1024) column; default 1024)")
+    sp.add_argument("--api-key", default=None, help="API key for openai embeddings (or LLM_API_KEY)")
+    sp.add_argument("--base-url", default=None, help="Base URL for openai-compatible embeddings")
+
+
 def main(argv=None):
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s [%(levelname)-7s] %(name)s: %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S")
     p = argparse.ArgumentParser(description="Query the JN Grader task bank.")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
@@ -184,10 +288,23 @@ def main(argv=None):
     sp.add_argument("--key", required=True)
     sp.add_argument("--n", type=int, default=5)
     sp.add_argument("--lowest", action="store_true")
+
+    sp = sub.add_parser("embed", help="Backfill assignment embeddings (pgvector).")
+    g = sp.add_mutually_exclusive_group(required=True)
+    g.add_argument("--key", help="Embed a single assignment")
+    g.add_argument("--all", action="store_true", help="Embed all assignments")
+    _add_embed_args(sp)
+
+    sp = sub.add_parser("similar", help="Find assignments semantically similar to --key.")
+    sp.add_argument("--key", required=True)
+    sp.add_argument("--n", type=int, default=5)
+    _add_embed_args(sp)
+
     args = p.parse_args(argv)
 
     conn = db_common.connect()
-    {"list": cmd_list, "stats": cmd_stats, "errors": cmd_errors, "top": cmd_top}[args.cmd](conn, args)
+    {"list": cmd_list, "stats": cmd_stats, "errors": cmd_errors, "top": cmd_top,
+     "embed": cmd_embed, "similar": cmd_similar}[args.cmd](conn, args)
     conn.close()
 
 

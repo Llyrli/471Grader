@@ -42,13 +42,24 @@ def _question_block(scored: dict[str, Any], q: str) -> str:
     details = ag.get("details", "")
 
     feedback = scored.get("feedback", {}).get(q, "")
+    diag = scored.get("diagnostics", {}).get(q, {})
 
     lines = [
         f"### {q} — {qi}/10  (result {result}/3 + process {process}/7)",
         f"- **自动判分:** {status}" + (f"  ({details})" if details else ""),
     ]
+    div = diag.get("first_divergence")
+    if div:
+        located = "" if diag.get("located", True) else "(无法定位,转人工)"
+        lines.append(f"- **偏差定位:** `{div}` {located}".rstrip())
+    if diag.get("error_class") and diag.get("error_class") not in ("none", None):
+        conf = diag.get("confidence")
+        conf_s = f"  置信度 {conf:.2f}" if isinstance(conf, (int, float)) else ""
+        lines.append(f"- **错因分类:** {diag['error_class']}{conf_s}")
     if feedback:
         lines.append(f"- **诊断:** {feedback}")
+    if diag.get("fix"):
+        lines.append(f"- **修改建议:** {diag['fix']}")
     return "\n".join(lines)
 
 
@@ -96,6 +107,13 @@ def render_submission(scored: dict[str, Any]) -> str:
 
     parts = [
         f"## {sid} — {final}/{MAX_TOTAL}",
+    ]
+    if scored.get("status") == "ABSTAIN":
+        reasons = ", ".join(scored.get("review_reasons", [])) or "low confidence"
+        parts.append(f"> ⚑ **弃判,转人工复核** — 原因: {reasons}")
+    if "confidence" in scored:
+        parts.append(f"- 评分置信度: {scored.get('confidence')}  |  状态: `{scored.get('status', 'AUTO')}`")
+    parts += [
         f"- 执行状态: `{exec_status}`",
         f"- 评分时间: {scored.get('scored_at', 'n/a')}",
         "",
@@ -148,20 +166,28 @@ def render_summary(records: list[dict[str, Any]]) -> str:
         "",
         f"共 {len(records)} 份提交,满分 {MAX_TOTAL}。",
         "",
-        "| 学生 | Q1 | Q2 | Q3 | 总分 | 执行状态 |",
-        "|---|---|---|---|---|---|",
+        "| 学生 | Q1 | Q2 | Q3 | 总分 | 置信度 | 状态 | 执行状态 |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     finals: list[int] = []
+    abstained = 0
     for r in sorted(records, key=lambda x: x.get("student_id", "")):
         sid = r.get("student_id", "?")
         final = r.get("final_score", 0)
         finals.append(final)
+        st = r.get("status", "AUTO")
+        if st == "ABSTAIN":
+            abstained += 1
+        conf = r.get("confidence", "")
+        st_disp = "⚑ ABSTAIN" if st == "ABSTAIN" else "AUTO"
         lines.append(
             f"| {sid} "
             f"| {r.get('Q1_score', 0)} "
             f"| {r.get('Q2_score', 0)} "
             f"| {r.get('Q3_score', 0)} "
             f"| **{final}** "
+            f"| {conf} "
+            f"| {st_disp} "
             f"| `{r.get('execution_status', '?')}` |"
         )
 
@@ -171,6 +197,7 @@ def render_summary(records: list[dict[str, Any]]) -> str:
             "",
             f"- 平均分: {mean:.1f}/{MAX_TOTAL}",
             f"- 最高 / 最低: {max(finals)} / {min(finals)}",
+            f"- 自动判定 / 转人工: {len(finals) - abstained} / {abstained}",
         ]
     return "\n".join(lines)
 

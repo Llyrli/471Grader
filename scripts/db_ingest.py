@@ -184,6 +184,24 @@ def run(args) -> None:
                 ir = json.loads(ir_path.read_text(encoding="utf-8"))
         ingest_one(conn, assignment_id, scored, ir)
 
+    if getattr(args, "embed", False):
+        try:
+            from embeddings import Embedder, to_pgvector
+            embedder = Embedder(provider=args.embed_provider, model=args.embed_model,
+                                api_key=getattr(args, "api_key", None),
+                                base_url=getattr(args, "base_url", None))
+            with conn.cursor() as cur:
+                cur.execute("SELECT COALESCE(title,''), COALESCE(description,'') "
+                            "FROM assignments WHERE id = %s", (assignment_id,))
+                t, d = cur.fetchone()
+                vec = embedder.embed_one(f"{t}\n\n{d}".strip())
+                cur.execute("UPDATE assignments SET embedding = %s::vector WHERE id = %s",
+                            (to_pgvector(vec), assignment_id))
+            conn.commit()
+            logger.info("Embedded assignment '%s' (provider=%s)", args.key, embedder.provider)
+        except Exception as exc:
+            logger.warning("Embedding skipped: %s", exc)
+
     conn.close()
     logger.info("Done. Ingested %d submission(s) for '%s'.", len(scored_files), args.key)
 
@@ -199,6 +217,12 @@ def parse_args(argv=None):
     p.add_argument("--scored", type=Path, required=True, help="Dir with *_scored.json")
     p.add_argument("--ir", type=Path, default=None, help="Dir with IR anon-NNN.json (optional)")
     p.add_argument("--max-score", type=int, default=30)
+    p.add_argument("--embed", action="store_true",
+                   help="Compute + store the assignment embedding (pgvector) after ingest")
+    p.add_argument("--embed-provider", choices=["hash", "openai"], default="hash")
+    p.add_argument("--embed-model", default=None)
+    p.add_argument("--api-key", default=None)
+    p.add_argument("--base-url", default=None)
     p.add_argument("--verbose", "-v", action="store_true")
     return p.parse_args(argv)
 

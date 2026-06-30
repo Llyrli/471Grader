@@ -13,7 +13,35 @@ questions:
 rtol: 0.02
 atol: 1.0e-8
 answer_var: u
+# Ordered intermediate-value checkpoints for deterministic deviation localization.
+# The reference materializes each `ref_var`; the student is matched by array
+# shape+value (name-agnostic). The FIRST unmatched checkpoint, in this pipeline
+# order, localizes the logic error. Applied to every question.
+#   global_stiffness → assembly/constitutive/element-matrix errors
+#   bc_reduced       → boundary-condition (elimination/penalty) errors
+#   displacement     → solve/post-processing errors (this is the answer)
+checkpoints:
+  - {name: global_stiffness, ref_var: Kg}
+  - {name: bc_reduced,       ref_var: K_free}
+  - {name: displacement,     ref_var: u, is_answer: true}
 expected:
   Q1: [0.0, 0.5, 1.0]
   Q2: [0.0, 0.015, 0.02]
   Q3: [0.0, 0.0, 0.002, 0.0]
+# Reference-free physics invariants (see physics_checks.py). Each holds for a
+# correct FE solve regardless of the specific numbers, so they need no reference
+# answer. A check is `na` (ignored) when its variable isn't materialized under
+# the given name(s) — never penalized. A FAIL on a PASSED answer routes the
+# submission to human review (deterministic signals contradict each other).
+physics_checks:
+  - {name: stiffness_symmetric, type: symmetric, var: Kg, candidates: [K, Kglobal, K_global]}
+  - {name: stiffness_psd,       type: psd,       var: Kg, candidates: [K, Kglobal, K_global]}
+  - {name: displacement_finite, type: finite,    var: u,  candidates: [U, disp, d]}
+  - {name: bc_fixed_zero,       type: dirichlet, var: u,  candidates: [U, disp, d], dofs: [0]}
+# Plot/field comparison (see field_checks.py). Curves are recovered from the
+# matplotlib figure state; `na` when nothing suitable was plotted. Matching is
+# order-independent across all drawn curves (tolerant of axis/geometry helper
+# lines and curves accumulating across cells).
+field_checks:
+  - {name: plotted_displacement, type: plot_present, min_curves: 1}
+  - {name: displacement_bounded, type: plot_bounded, max_abs: 100.0}

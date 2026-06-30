@@ -147,14 +147,17 @@ def grade_student(
     student_text: str,
     llm_problems: list[dict],
     criteria: list[str],
+    memory_block: str = "",
 ) -> dict[str, Any]:
     task_lines = [f"- {p['name']} (max {p['points']} pts): {p.get('desc', '')}" for p in llm_problems]
     crit_lines = "\n".join(f"- {c}" for c in criteria)
+    memory_section = f"---\n{memory_block}\n\n" if memory_block else ""
     user = (
         f"[PROBLEM STATEMENT]\n{description}\n\n"
         f"---\n[REFERENCE SOLUTION]\n{ref_text}\n\n"
         f"---\n[REFERENCE ANSWERS]\n{ref_answers}\n\n"
         f"---\n[STUDENT SUBMISSION]\n{student_text}\n\n"
+        f"{memory_section}"
         f"---\n[ADDITIONAL CRITERIA] (apply to every problem's score)\n{crit_lines}\n\n"
         f"---\n[GRADING TASK]\nScore these problems:\n" + "\n".join(task_lines)
     )
@@ -174,6 +177,7 @@ def score_one(
     description: str,
     ref_text: str,
     ref_answers: str,
+    memory_block: str = "",
 ) -> dict[str, Any]:
     student_text = extract_notebook_text(nb_path)
     problems_cfg = cfg["problems"]
@@ -185,7 +189,8 @@ def score_one(
     if llm_problems:
         try:
             llm_result = grade_student(client, description, ref_text, ref_answers,
-                                       student_text, llm_problems, criteria)
+                                       student_text, llm_problems, criteria,
+                                       memory_block=memory_block)
         except Exception as exc:
             logger.warning("  LLM failed for %s: %s", student_id, exc)
             llm_result = {"overall": f"LLM grading failed: {exc}"}
@@ -238,12 +243,20 @@ def run(args) -> None:
     client = LLMClient(provider=args.provider, api_key=api_key,
                        base_url=args.base_url, model=model)
 
+    memory_block = ""
+    if getattr(args, "memory_path", None):
+        from program_memory import load_block
+        memory_block = load_block(args.memory_path)
+        if memory_block:
+            logger.info("Program memory loaded: %s", args.memory_path)
+
     files = sorted(p for p in args.submissions.iterdir() if p.suffix.lower() == ".ipynb")
     logger.info("Grading %d submission(s) with %s (%s) …", len(files), model, args.provider)
     for idx, nb_path in enumerate(files, 1):
         sid = f"anon-{idx:03d}"
         try:
-            scored = score_one(nb_path, sid, client, cfg, description, ref_text, ref_answers)
+            scored = score_one(nb_path, sid, client, cfg, description, ref_text, ref_answers,
+                               memory_block=memory_block)
         except Exception as exc:
             logger.error("  %s failed: %s", nb_path.name, exc)
             continue
@@ -259,6 +272,9 @@ def parse_args(argv=None):
     p.add_argument("--reference", type=Path, required=True)
     p.add_argument("--config", type=Path, required=True)
     p.add_argument("--description", type=Path, default=None)
+    p.add_argument("--memory", type=Path, default=None, dest="memory_path",
+                   help="Course program-memory store (program_memory.py); injects "
+                        "course conventions + common error patterns as advisory priors")
     p.add_argument("--output", "-o", type=Path, required=True)
     p.add_argument("--provider", choices=["openai", "anthropic"], default="openai")
     p.add_argument("--api-key", type=str, default=None)

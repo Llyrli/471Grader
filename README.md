@@ -171,6 +171,35 @@ rtol: 0.02
 atol: 1.0e-8
 answer_var: u                   # variable in the reference holding the answer
 # expected:                     # optional hard-coded fallback if no runnable reference
+physics_checks:                 # optional reference-free invariants (see below)
+  - {name: stiffness_symmetric, type: symmetric, var: Kg, candidates: [K, Kglobal]}
+  - {name: stiffness_psd,       type: psd,       var: Kg}
+  - {name: bc_fixed_zero,       type: dirichlet, var: u, dofs: [0]}
+```
+
+**Physics invariants (`physics_checks:`)** — a second, reference-free
+deterministic signal. Each invariant must hold for any correct FE solve
+regardless of the numbers (`finite`, `bounded`, `symmetric`, `psd`, `dirichlet`,
+`residual`, `net_sum`), so it needs no reference answer. A check is `na`
+(ignored, never penalized) when its variable isn't materialized under the given
+name(s); a **failure on a question whose answer passed** is a contradiction that
+routes the submission to human review. Results land in
+`autograde[Q].physics` and failing invariants are shown to the LLM.
+
+**Plot/field comparison (`field_checks:`)** — extends the deterministic layer to
+*graphical* output. The data behind a plot often never lands in a checkable
+variable, so `field_checks.py` recovers the drawn curves from matplotlib's figure
+state after execution and checks them: `plot_present`, `plot_bounded`,
+`plot_monotonic` (e.g. displacement increases along a bar), `plot_endpoints`
+(fixed end = 0), and `plot_matches` (a curve matches an expected array within
+tolerance). Same `na`-safe, config-driven semantics; results land in
+`autograde[Q].fields` and feed the same findings/gate path as physics checks.
+
+```yaml
+field_checks:
+  - {name: plotted_something, type: plot_present,   min_curves: 1}
+  - {name: disp_increasing,   type: plot_monotonic, direction: nondecreasing}
+  - {name: disp_fixed_end,    type: plot_endpoints, first: 0.0}
 ```
 
 ## Reference oracle
@@ -212,6 +241,75 @@ docker compose run --rm grader python scripts/db_query.py top    --key $ASSIGN -
 docker compose run --rm grader python scripts/db_query.py errors --key $ASSIGN # numeric: failure rate
 ```
 
+### Semantic similar-problem retrieval (pgvector)
+
+`assignments.embedding vector(1024)` is filled by a pluggable embedder
+(`scripts/embeddings.py`): `hash` (offline, deterministic, no API — default) or
+`openai` (any OpenAI-compatible `/embeddings` endpoint). Use it to group/dedup
+problems across assignments and locate prior work whose grading conventions apply.
+
+```bash
+# Populate embeddings (at ingest, or backfill all existing assignments)
+docker compose run --rm grader python scripts/db_ingest.py ... --embed
+docker compose run --rm grader python scripts/db_query.py embed --all          # hash (offline)
+docker compose run --rm grader python scripts/db_query.py embed --all \
+  --embed-provider openai --base-url https://api.openai.com/v1                  # real embeddings
+
+# Nearest prior assignments by cosine similarity (auto-backfills missing vectors)
+docker compose run --rm grader python scripts/db_query.py similar --key $ASSIGN --n 5
+```
+
+## Program memory (cross-assignment consistency)
+
+`scripts/program_memory.py` sediments **course grading conventions** and
+**high-frequency error patterns** from past scored assignments into a portable
+per-course store (`workspace/memory/<course>.json`), then re-injects them into
+later grading for consistency across assignments — closing the loop
+`grade → sediment → next assignment grades with memory → re-sediment`.
+
+It builds **deterministically** from signals the pipeline already emits (the
+numeric engine's `error_class` + `first_divergence` locus; the general engine's
+per-problem deductions) — no LLM required. An optional `--distill` pass only
+compresses collected feedback into reusable convention bullets; it never changes
+scores. The injected block is framed as **advisory priors** placed *after* the
+deterministic findings — it must not override execution facts.
+
+```bash
+# After grading HW2 & HW4, sediment them into the course memory
+python scripts/program_memory.py sediment --course ME471 \
+  --scored workspace/HW2/scored workspace/HW4/scored \
+  --store workspace/memory/ME471.json
+
+python scripts/program_memory.py show --store workspace/memory/ME471.json
+
+# Then grade the NEXT assignment with that memory (works with either engine)
+python scripts/score_general.py datasets/HW5/submissions ... \
+  --memory workspace/memory/ME471.json
+python scripts/score_notebooks.py workspace/HW6/processed ... \
+  --memory workspace/memory/ME471.json
+```
+
+Re-running `sediment` on an already-folded assignment is skipped (idempotent);
+pass `--force` to re-fold after a re-grade.
+
+## One-command pipeline + orchestration (Dify / n8n)
+
+`scripts/pipeline.py` chains the stages for one assignment and emits a
+machine-readable run manifest plus an exit code a workflow can branch on
+(`0` = all auto, `10` = some abstained → human approval, `1` = a stage failed).
+
+```bash
+python scripts/pipeline.py --assign HW2 --engine numeric  $LLM   # preprocess→score→report
+python scripts/pipeline.py --assign HW3 --engine general --ingest $LLM
+python scripts/pipeline.py --assign HW2 --engine numeric --from report --to report  # one stage
+```
+
+The manifest lands at `workspace/<ASSIGN>/run_manifest.json` with per-stage
+status and an `auto`/`abstain` review summary. `orchestration/` ships an
+importable **n8n** workflow (with a `Wait`-based human-approval node fed by the
+abstain queue) and documents the equivalent **Dify** HTTP wiring. See
+[`orchestration/README.md`](orchestration/README.md).
+
 ## Identity (anonymization)
 
 Submissions are graded under anonymous ids (`anon-001`, …). `scripts/identity.py`
@@ -245,8 +343,14 @@ detectable, the original filename is kept so you can map back manually.
 ├── scripts/
 │   ├── gen_config.py              # description.txt → config.yaml (LLM)
 │   ├── preprocess.py / run_tests.py / generate_rubric.py / score_notebooks.py   # numeric engine
+│   ├── physics_checks.py         # reference-free physics invariants (equilibrium/symmetry/PSD/BC/residual)
+│   ├── field_checks.py           # plot/field comparison — recovers curves from matplotlib state
+│   ├── pipeline.py               # end-to-end orchestrator: stages → run manifest + exit code
 │   ├── score_general.py           # reference-grounded per-problem LLM grader
 │   ├── report.py                  # scored JSON → Markdown reports
+│   ├── program_memory.py         # sediment + reuse course conventions / error patterns
+│   ├── embeddings.py             # pluggable text embedder (hash offline / openai) for pgvector
+│   ├── eval_harness.py           # human-graded ground truth → agreement / localization metrics
 │   ├── identity.py                # name / student-id extraction
 │   ├── llm_client.py              # provider abstraction (openai / anthropic)
 │   ├── db_common.py / db_ingest.py / db_query.py / db/schema.sql                # task bank

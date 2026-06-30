@@ -1,0 +1,123 @@
+{
+  "name": "JN Grader — grade with human-abstention approval",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "Start (manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "assign", "value": "HW2" },
+            { "name": "engine", "value": "numeric" },
+            { "name": "manifest", "value": "/app/workspace/HW2/run_manifest.json" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config",
+      "name": "Config (assignment/engine)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "command": "=cd /app && python scripts/pipeline.py --assign {{$json[\"assign\"]}} --engine {{$json[\"engine\"]}} --manifest {{$json[\"manifest\"]}} --provider openai --base-url $LLM_BASE_URL --model $LLM_MODEL || true"
+      },
+      "id": "run_pipeline",
+      "name": "Run grading pipeline",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "notes": "Runs preprocess→score→report. Appends `|| true` so the node never hard-fails on exit code 10 (needs-review); the manifest is the source of truth."
+    },
+    {
+      "parameters": {
+        "command": "=cat {{$node[\"Config (assignment/engine)\"].json[\"manifest\"]}}"
+      },
+      "id": "read_manifest",
+      "name": "Read run manifest",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = JSON.parse($json.stdout);\nreturn [{ json: {\n  status: m.status,\n  abstain: (m.review && m.review.abstain) || 0,\n  total: (m.review && m.review.total) || 0,\n  review_queue: (m.review && m.review.review_queue) || [],\n  failed_stage: m.failed_stage || null,\n  assign: $node[\"Config (assignment/engine)\"].json.assign,\n  engine: $node[\"Config (assignment/engine)\"].json.engine\n} }];"
+      },
+      "id": "parse_manifest",
+      "name": "Parse manifest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            { "value1": "={{$json[\"abstain\"]}}", "operation": "larger", "value2": 0 }
+          ]
+        }
+      },
+      "id": "needs_review",
+      "name": "Any abstentions?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "human_approval",
+      "name": "HUMAN APPROVAL (review queue)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1320, 200],
+      "notes": "Pauses the run. The review_queue ids/reasons are in the incoming item. A grader inspects workspace/<ASSIGN>/review_queue/ and resumes via the resume-webhook URL once decisions are made."
+    },
+    {
+      "parameters": {
+        "command": "=cd /app && python scripts/pipeline.py --assign {{$node[\"Parse manifest\"].json[\"assign\"]}} --engine {{$node[\"Parse manifest\"].json[\"engine\"]}} --from report --to report --ingest --manifest {{$node[\"Config (assignment/engine)\"].json[\"manifest\"]}}"
+      },
+      "id": "ingest_after_review",
+      "name": "Archive after approval",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1540, 200]
+    },
+    {
+      "parameters": {
+        "command": "=cd /app && python scripts/pipeline.py --assign {{$node[\"Parse manifest\"].json[\"assign\"]}} --engine {{$node[\"Parse manifest\"].json[\"engine\"]}} --from report --to report --ingest --manifest {{$node[\"Config (assignment/engine)\"].json[\"manifest\"]}}"
+      },
+      "id": "auto_ingest",
+      "name": "Auto-archive (all AUTO)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1320, 420]
+    }
+  ],
+  "connections": {
+    "Start (manual)": { "main": [[{ "node": "Config (assignment/engine)", "type": "main", "index": 0 }]] },
+    "Config (assignment/engine)": { "main": [[{ "node": "Run grading pipeline", "type": "main", "index": 0 }]] },
+    "Run grading pipeline": { "main": [[{ "node": "Read run manifest", "type": "main", "index": 0 }]] },
+    "Read run manifest": { "main": [[{ "node": "Parse manifest", "type": "main", "index": 0 }]] },
+    "Parse manifest": { "main": [[{ "node": "Any abstentions?", "type": "main", "index": 0 }]] },
+    "Any abstentions?": {
+      "main": [
+        [{ "node": "HUMAN APPROVAL (review queue)", "type": "main", "index": 0 }],
+        [{ "node": "Auto-archive (all AUTO)", "type": "main", "index": 0 }]
+      ]
+    },
+    "HUMAN APPROVAL (review queue)": { "main": [[{ "node": "Archive after approval", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "active": false
+}
