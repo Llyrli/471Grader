@@ -349,7 +349,26 @@ set -a; source .env; set +a     # give the server LLM_API_KEY for grading
 python webapp/app.py            # http://127.0.0.1:5000
 ```
 
-See [`webapp/README.md`](webapp/README.md).
+Then open **http://localhost:5000** in your browser (on WSL, `localhost` is
+forwarded to Windows automatically; if it doesn't resolve, run with
+`JN_HOST=0.0.0.0 python webapp/app.py` and use the machine's IP). Leave the
+terminal running — it's the server; `Ctrl+C` stops it.
+
+Using it:
+
+1. **New / Upload** (left) — type an assignment key (e.g. `HW6`), choose the
+   student submissions (`.ipynb` ×N or a `.zip`) and, optionally,
+   `reference.ipynb` / `description.txt` / `config.yaml`; click **Upload**.
+2. Pick the **engine** (`general` or `numeric`) and the LLM settings —
+   `provider` is the *API protocol*: for DeepSeek use **`openai`** with
+   **base-url** `https://api.deepseek.com` and **model** `deepseek-chat` (the key
+   comes from the server's `.env`, not the form). Click **▶ Start grading** and
+   watch the live run status.
+3. Click a graded assignment, then a submission, to **review** — per-problem
+   scores, feedback, and diagnostics. Use **needs review only** to jump to the
+   abstention queue, then **Approve** the AI score or **Override** it with a note.
+
+See [`webapp/README.md`](webapp/README.md) for the full API and details.
 
 ## Identity (anonymization)
 
