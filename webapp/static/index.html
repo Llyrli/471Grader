@@ -265,6 +265,11 @@ async function selectSubmission(sid){
       if(dg.fix) h += `fix: ${esc(dg.fix)}`;
       h += `</div>`;
     }
+    if(dg && dg.fix_verified!==undefined){
+      h += dg.fix_verified
+        ? `<div class="diag"><span class="tag" style="color:var(--ok);border-color:rgba(63,185,80,.4)">✓ fix verified by execution</span> the LLM's repair re-ran and reproduced the reference answer</div>`
+        : `<div class="diag"><span class="tag bad">✗ fix not verified</span> the proposed repair ${dg.fix_runs?'ran but still gave the wrong answer':'did not execute'}</div>`;
+    }
     for(const p of (it.physics||[])) h += `<div class="diag"><span class="tag bad">physics: ${p.name}</span>${esc(p.detail||'')}</div>`;
     for(const p of (it.fields||[])) h += `<div class="diag"><span class="tag bad">plot: ${p.name}</span>${esc(p.detail||'')}</div>`;
     h += `</div>`;

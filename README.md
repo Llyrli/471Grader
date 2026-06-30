@@ -232,8 +232,30 @@ all expose an OpenAI-compatible API, so use `--provider openai` and point at the
 with `--base-url` + `--model` — e.g. DeepSeek is
 `--provider openai --base-url https://api.deepseek.com --model deepseek-chat`.
 
-Only the process / per-problem score and feedback come from the model; the
-numeric **result** score always comes from execution.
+**Where the score comes from differs by engine.** In the **numeric** engine the
+pass/fail *result* score is decided by execution (the LLM only adds the 0–7
+*process* points for method quality, and cannot change pass/fail). In the
+**general** engine the LLM assigns the whole per-problem score, judged against
+the executed reference — only `link` problems and the confidence gate are
+deterministic. In both engines, low-confidence / contradictory cases are flagged
+for human review rather than auto-scored.
+
+### Fix → re-execute → verify (self-repair loop)
+
+`--verify-fixes` (numeric engine) turns the LLM's suggested fix from a *claim*
+into a *checked fact*: for each failed, located question it asks the model for a
+corrected, self-contained program, **runs it in the sandbox**, and lets execution
+decide — `fix_verified` is true only when the repaired code reproduces the
+reference answer within tolerance. If it doesn't, the failure is fed back and the
+model regenerates, up to `--fix-max-iter` rounds (default 3); **if still
+unverified after the last round, the submission is routed to human review**
+(`status: ABSTAIN`, reason `fix_unverified:<Q>`). This keeps the determinism-first
+contract — the LLM proposes, the kernel confirms.
+
+```bash
+python scripts/score_notebooks.py workspace/<A>/processed -o workspace/<A>/scored \
+  --reference datasets/<A>/reference.ipynb --verify-fixes --fix-max-iter 3 $LLM
+```
 
 ## Task bank (Postgres + pgvector)
 
@@ -403,6 +425,7 @@ detectable, the original filename is kept so you can map back manually.
 │   ├── preprocess.py / run_tests.py / generate_rubric.py / score_notebooks.py   # numeric engine
 │   ├── physics_checks.py         # reference-free physics invariants (equilibrium/symmetry/PSD/BC/residual)
 │   ├── field_checks.py           # plot/field comparison — recovers curves from matplotlib state
+│   ├── fix_verify.py             # LLM fix → re-execute → verify loop (deterministic confirmation)
 │   ├── pipeline.py               # end-to-end orchestrator: stages → run manifest + exit code
 │   ├── score_general.py           # reference-grounded per-problem LLM grader
 │   ├── report.py                  # scored JSON → Markdown reports

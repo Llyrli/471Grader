@@ -60,6 +60,13 @@ def _question_block(scored: dict[str, Any], q: str) -> str:
         lines.append(f"- **诊断:** {feedback}")
     if diag.get("fix"):
         lines.append(f"- **修改建议:** {diag['fix']}")
+    if diag.get("fix_verified") is not None or "fix_runs" in diag:
+        if diag.get("fix_verified"):
+            lines.append("- **修复验证:** ✓ 应用建议后重跑,结果已复现参考答案(执行确认)")
+        elif diag.get("fix_runs"):
+            lines.append("- **修复验证:** ✗ 修复后能跑通,但答案仍不对")
+        else:
+            lines.append("- **修复验证:** ✗ 修复后仍无法执行")
     return "\n".join(lines)
 
 

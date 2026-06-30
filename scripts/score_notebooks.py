@@ -198,6 +198,29 @@ def _invariant_reports(ag: dict[str, Any]) -> list[dict]:
     return (ag.get("physics") or []) + (ag.get("fields") or [])
 
 
+def _answer_expected(ag: dict[str, Any]) -> list | None:
+    """The reference answer for a question, from its located answer checkpoint."""
+    cps = ag.get("checkpoints", []) or []
+    for c in cps:
+        if c.get("is_answer") and c.get("expected") is not None:
+            return c["expected"]
+    for c in cps:
+        if c.get("expected") is not None:
+            return c["expected"]
+    return None
+
+
+def _one_finding(q: str, ag: dict[str, Any]) -> str:
+    """A compact one-question brief for the fix proposer."""
+    div = ag.get("first_divergence")
+    stage = CHECKPOINT_STAGE.get(div, div)
+    cp = next((c for c in ag.get("checkpoints", []) if c.get("name") == div), {})
+    line = f"{q} failed; first divergence at '{div}' ({stage})."
+    if cp.get("got") is not None and cp.get("expected") is not None:
+        line += f" got={cp['got']} expected={cp['expected']}."
+    return line
+
+
 def _physics_lines(ag: dict[str, Any], passed: bool) -> list[str]:
     """Render any invariant violations (physics + plot/field) as deterministic notes.
 
@@ -446,6 +469,8 @@ def score_one(
     review_dir: Path | None = None,
     threshold: float = CONFIDENCE_THRESHOLD,
     memory_block: str = "",
+    verify_fixes: bool = False,
+    fix_max_iter: int = 3,
 ) -> None:
     with open(ir_path, encoding="utf-8") as f:
         ir = json.load(f)
@@ -479,6 +504,46 @@ def score_one(
 
     scored = enforce_scores(llm_result, autograde, questions)
     scored = gate(scored, autograde, questions, exec_status, llm_failed, threshold)
+
+    # Optional self-repair loop: for each failed, located question with a known
+    # target answer, have the LLM repair the code, RE-EXECUTE, and if it still
+    # doesn't reproduce the reference, regenerate (feeding the failure back) up to
+    # `fix_max_iter` times. EXECUTION is the judge. If still unverified after the
+    # last iteration, the question is routed to human review.
+    if verify_fixes and not llm_failed:
+        unverified: list[str] = []
+        for q in questions:
+            ag = autograde.get(q, {})
+            if ag.get("passed"):
+                continue
+            expected = _answer_expected(ag)
+            if expected is None:
+                continue  # no target to verify against (unlocated) → skip
+            try:
+                from fix_verify import attempt_fix
+                fr = attempt_fix(client, student_text, _one_finding(q, ag),
+                                 expected, reference_hint=reference_text[:4000],
+                                 max_iterations=fix_max_iter)
+            except Exception as exc:
+                logger.warning("  fix-verify failed for %s %s: %s", student_id, q, exc)
+                continue
+            scored.setdefault("diagnostics", {}).setdefault(q, {})
+            scored["diagnostics"][q].update({
+                "fix_runs": fr["fix_runs"],
+                "fix_verified": fr["fix_verified"],
+                "fix_iterations": fr["iterations"],
+                "corrected_code": fr["corrected_code"],
+            })
+            if not fr["fix_verified"]:
+                unverified.append(q)
+            logger.info("  %s %s fix-verify: runs=%s verified=%s iters=%d",
+                        student_id, q, fr["fix_runs"], fr["fix_verified"], fr["iterations"])
+        # Exhausted the repair budget without a verified fix → defer to a human.
+        if unverified:
+            scored.setdefault("review_reasons", []).append(
+                "fix_unverified:" + ",".join(unverified))
+            scored["status"] = "ABSTAIN"
+
     scored["student_id"] = student_id
     scored["scored_at"] = datetime.now(timezone.utc).isoformat()
     scored["execution_status"] = exec_status
@@ -521,6 +586,8 @@ def run_batch(
     review_dir: Path | None = None,
     threshold: float = CONFIDENCE_THRESHOLD,
     memory_path: Path | None = None,
+    verify_fixes: bool = False,
+    fix_max_iter: int = 3,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     if review_dir is None:
@@ -583,7 +650,8 @@ def run_batch(
         try:
             score_one(ir_path, output_dir, client, reference_text, rubric,
                       review_dir=review_dir, threshold=threshold,
-                      memory_block=memory_block)
+                      memory_block=memory_block, verify_fixes=verify_fixes,
+                      fix_max_iter=fix_max_iter)
         except Exception as exc:
             logger.error("  Failed: %s — %s", ir_path.name, exc)
 
@@ -627,6 +695,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--confidence-threshold", type=float, default=CONFIDENCE_THRESHOLD,
                         dest="threshold",
                         help=f"Abstain below this confidence (default: {CONFIDENCE_THRESHOLD})")
+    parser.add_argument("--verify-fixes", action="store_true", dest="verify_fixes",
+                        help="For failed, located questions: have the LLM repair the code, "
+                             "re-execute it, and record whether the fix runs/reproduces the "
+                             "reference answer (deterministic fix verification)")
+    parser.add_argument("--fix-max-iter", type=int, default=3, dest="fix_max_iter",
+                        help="Max self-repair iterations before routing to human review "
+                             "(default: 3; each round regenerates with the failure fed back)")
     parser.add_argument("--provider", choices=["openai", "anthropic"], default="openai",
                         help="LLM provider: 'anthropic' for Claude (native SDK), "
                              "'openai' for OpenAI-compatible endpoints (default)")
@@ -667,6 +742,8 @@ def main(argv: list[str] | None = None) -> None:
         review_dir=args.review_dir,
         threshold=args.threshold,
         memory_path=args.memory_path,
+        verify_fixes=args.verify_fixes,
+        fix_max_iter=args.fix_max_iter,
     )
 
 
