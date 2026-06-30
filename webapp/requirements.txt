@@ -1,0 +1,2 @@
+# Review dashboard (webapp/) — extra dependency on top of scripts/requirements.txt
+flask>=3.0.0

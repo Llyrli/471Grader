@@ -12,6 +12,12 @@ task bank you can query across assignments.
 It is course-agnostic: nothing about a specific assignment is hard-coded — all
 assignment knowledge lives in per-assignment files you drop in.
 
+![JN Grader web workbench — upload, grade, and review submissions](demo.png)
+
+*The web workbench: upload an assignment, start a grading run, and review every
+submission — scores, per-problem feedback, and the abstention queue — with
+one-click approve / override (student names redacted).*
+
 ---
 
 ## Two grading engines
@@ -221,6 +227,11 @@ Both graders use `scripts/llm_client.py`:
   + `--model`; key from `LLM_API_KEY`.
 - `--provider anthropic` — native Anthropic SDK; key from `ANTHROPIC_API_KEY`.
 
+`provider` is the **API protocol, not the vendor**. DeepSeek / Qwen / SiliconFlow
+all expose an OpenAI-compatible API, so use `--provider openai` and point at them
+with `--base-url` + `--model` — e.g. DeepSeek is
+`--provider openai --base-url https://api.deepseek.com --model deepseek-chat`.
+
 Only the process / per-problem score and feedback come from the model; the
 numeric **result** score always comes from execution.
 
@@ -320,6 +331,26 @@ importable **n8n** workflow (with a `Wait`-based human-approval node fed by the
 abstain queue) and documents the equivalent **Dify** HTTP wiring. See
 [`orchestration/README.md`](orchestration/README.md).
 
+### Grading workbench (web UI)
+
+`webapp/` is a small Flask app that drives the whole loop from the browser:
+**upload** an assignment's files (submissions `.ipynb`/`.zip` + optional
+reference/description/config), **start grading** (runs `pipeline.py` in the
+background with live status), then **review** — browse scores + feedback +
+deterministic diagnostics and **work the abstention queue**, approving or
+overriding flagged submissions. Each decision is persisted to
+`workspace/<ASSIGN>/decisions/` (the visual form of the human-approval node). It
+reads/writes the workspace live — no database required; API keys stay on the
+server, never in the browser.
+
+```bash
+pip install -r webapp/requirements.txt
+set -a; source .env; set +a     # give the server LLM_API_KEY for grading
+python webapp/app.py            # http://127.0.0.1:5000
+```
+
+See [`webapp/README.md`](webapp/README.md).
+
 ## Identity (anonymization)
 
 Submissions are graded under anonymous ids (`anon-001`, …). `scripts/identity.py`
@@ -363,6 +394,9 @@ detectable, the original filename is kept so you can map back manually.
 │   ├── llm_client.py              # provider abstraction (openai / anthropic)
 │   ├── db_common.py / db_ingest.py / db_query.py / db/schema.sql                # task bank
 │   └── requirements.txt
+├── orchestration/                # n8n workflow + Dify wiring (human-approval node)
+├── webapp/                       # Flask workbench: upload → grade → review (human approval)
+├── tests/                        # pytest suite
 ├── datasets/<ASSIGN>/             # per-assignment inputs
 └── workspace/<ASSIGN>/            # generated outputs (git-ignored)
 ```

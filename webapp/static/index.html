@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JN Grader — Review Dashboard</title>
+<style>
+  :root {
+    --bg:#0f1116; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --fg:#e6e8ee; --muted:#9aa3b2; --accent:#5b8cff;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --rev:#a371f7;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line);
+           display:flex; align-items:baseline; gap:12px; }
+  header h1 { font-size:16px; margin:0; }
+  header .sub { color:var(--muted); font-size:12px; }
+  .wrap { display:grid; grid-template-columns:280px 1fr 1.1fr; height:calc(100vh - 51px); }
+  .col { overflow-y:auto; padding:14px; }
+  .col.mid { border-left:1px solid var(--line); border-right:1px solid var(--line); }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+       color:var(--muted); margin:4px 0 10px; }
+
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+  .card:hover { border-color:var(--accent); }
+  .card.active { border-color:var(--accent); background:var(--panel2); }
+  .card .name { font-weight:600; }
+  .card .meta { color:var(--muted); font-size:12px; margin-top:3px; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px;
+          font-weight:600; }
+  .pill.auto { background:rgba(63,185,80,.15); color:var(--ok); }
+  .pill.abstain { background:rgba(248,81,73,.15); color:var(--bad); }
+  .pill.reviewed { background:rgba(163,113,247,.18); color:var(--rev); }
+  .pill.engine { background:rgba(91,140,255,.15); color:var(--accent); }
+
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); font-size:13px; }
+  th { color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; }
+  tr.row { cursor:pointer; }
+  tr.row:hover td { background:var(--panel2); }
+  tr.row.active td { background:var(--panel2); }
+  .bar { height:6px; border-radius:3px; background:var(--line); overflow:hidden; min-width:60px; }
+  .bar > span { display:block; height:100%; background:var(--accent); }
+  .bar.lo > span { background:var(--bad); } .bar.mid > span { background:var(--warn); }
+  .bar.hi > span { background:var(--ok); }
+
+  .toolbar { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+  .toolbar label { color:var(--muted); font-size:12px; cursor:pointer; }
+  .muted { color:var(--muted); }
+  .empty { color:var(--muted); padding:30px 0; text-align:center; }
+
+  .item { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:10px 12px; margin-bottom:8px; }
+  .item .hd { display:flex; justify-content:space-between; align-items:center; }
+  .item .hd b { font-size:14px; }
+  .fb { color:var(--fg); margin-top:6px; white-space:pre-wrap; }
+  .diag { margin-top:6px; font-size:12px; color:var(--muted); }
+  .tag { display:inline-block; padding:1px 6px; border-radius:5px; font-size:11px;
+         background:var(--panel2); border:1px solid var(--line); margin-right:5px; }
+  .tag.bad { color:var(--bad); border-color:rgba(248,81,73,.4); }
+  .reasons { background:rgba(210,153,34,.1); border:1px solid rgba(210,153,34,.35);
+             border-radius:8px; padding:8px 12px; margin-bottom:10px; color:var(--warn); font-size:13px; }
+  .decision { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+              padding:12px; margin-top:8px; position:sticky; bottom:0; }
+  .decision .row2 { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  input, textarea, button { font:inherit; }
+  input[type=number], input[type=text], textarea {
+    background:var(--bg); border:1px solid var(--line); color:var(--fg);
+    border-radius:6px; padding:6px 8px; }
+  textarea { width:100%; resize:vertical; min-height:48px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px;
+           padding:7px 14px; cursor:pointer; font-weight:600; }
+  button.ghost { background:var(--panel2); color:var(--fg); border:1px solid var(--line); }
+  button:disabled { opacity:.5; cursor:default; }
+  .done { color:var(--rev); font-weight:600; }
+  .frow { display:flex; gap:8px; align-items:center; margin-top:7px; flex-wrap:wrap; }
+  .frow label { color:var(--muted); font-size:12px; min-width:96px; }
+  .frow input[type=file] { font-size:12px; color:var(--muted); flex:1; min-width:0; }
+  #uploadPanel input[type=text], #uploadPanel select { margin-top:7px; }
+  select { background:var(--bg); border:1px solid var(--line); color:var(--fg);
+           border-radius:6px; padding:6px 8px; }
+  .stage { display:inline-block; padding:1px 7px; border-radius:5px; font-size:11px;
+           margin:2px 4px 0 0; background:var(--panel2); border:1px solid var(--line); }
+  .stage.ok { color:var(--ok); } .stage.failed { color:var(--bad); }
+  pre.log { background:var(--bg); border:1px solid var(--line); border-radius:6px;
+            padding:6px 8px; font-size:11px; max-height:120px; overflow:auto; margin-top:6px;
+            white-space:pre-wrap; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>JN Grader</h1>
+  <span class="sub">Review dashboard — browse scores &amp; work the abstention queue</span>
+</header>
+<div class="wrap">
+  <div class="col" id="assignments">
+    <h2>New / Upload</h2>
+    <div class="card" id="uploadPanel" style="cursor:default">
+      <input type="text" id="newAssign" placeholder="assignment key (e.g. HW6)" style="width:100%">
+      <div class="frow"><label>submissions <span class="muted">(.ipynb ×N or .zip)</span></label>
+        <input type="file" id="fSubs" multiple accept=".ipynb,.zip"></div>
+      <div class="frow"><label>reference.ipynb</label><input type="file" id="fRef" accept=".ipynb"></div>
+      <div class="frow"><label>description.txt</label><input type="file" id="fDesc" accept=".txt"></div>
+      <div class="frow"><label>config.yaml</label><input type="file" id="fCfg" accept=".yaml,.yml"></div>
+      <div class="frow">
+        <select id="engine"><option value="general">general</option><option value="numeric">numeric</option></select>
+        <input type="text" id="baseUrl" placeholder="base-url" style="flex:1">
+      </div>
+      <div class="frow">
+        <input type="text" id="provider" placeholder="provider (openai)" style="width:46%">
+        <input type="text" id="model" placeholder="model" style="flex:1">
+      </div>
+      <div class="row2">
+        <button id="btnUpload">Upload</button>
+        <button class="ghost" id="btnGrade">▶ Start grading</button>
+      </div>
+      <div id="uploadMsg" class="muted" style="margin-top:6px;font-size:12px"></div>
+      <div id="runBox" style="display:none;margin-top:8px"></div>
+    </div>
+    <h2>Assignments</h2><div id="assignList"></div>
+  </div>
+  <div class="col mid"><h2 id="midTitle">Submissions</h2>
+    <div class="toolbar" id="toolbar" style="display:none">
+      <label><input type="checkbox" id="reviewOnly"> needs review only</label>
+      <span class="muted" id="counts"></span>
+    </div>
+    <div id="subTable"><div class="empty">Select an assignment.</div></div>
+  </div>
+  <div class="col"><h2 id="detTitle">Detail</h2>
+    <div id="detail"><div class="empty">Select a submission.</div></div>
+  </div>
+</div>
+
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+let STATE = { assign:null, sid:null, rows:[], reviewOnly:false };
+
+async function getJSON(u, opt) { const r = await fetch(u, opt); return r.json(); }
+function barClass(p){ return p>=80?'hi':p>=60?'mid':'lo'; }
+function statusPill(s){ return s==='ABSTAIN'
+  ? '<span class="pill abstain">ABSTAIN</span>' : '<span class="pill auto">AUTO</span>'; }
+
+async function loadAssignments(){
+  // Merge uploaded datasets (gradeable) with graded summaries.
+  let ds = []; try { ds = await getJSON('/api/datasets'); } catch(e){}
+  const graded = {}; for(const a of await getJSON('/api/assignments')) graded[a.assignment]=a;
+  const el = $('#assignList'); el.innerHTML = '';
+  const names = new Set([...ds.map(d=>d.assignment), ...Object.keys(graded)]);
+  if(!names.size){ el.innerHTML = '<div class="empty">No assignments yet — upload some above.</div>'; return; }
+  for(const name of [...names].sort()){
+    const d = ds.find(x=>x.assignment===name) || {assignment:name, submissions:0};
+    const g = graded[name];
+    const card = document.createElement('div');
+    card.className = 'card'; card.dataset.assign = name;
+    let meta = `${d.submissions||0} uploaded`;
+    if(g) meta += ` · ${g.submissions} graded · avg ${g.avg_pct}%` +
+      (g.abstain? ` · <span class="pill abstain">${g.abstain} review</span>`:'') +
+      (g.reviewed? ` · <span class="pill reviewed">${g.reviewed} reviewed</span>`:'');
+    else meta += d.running? ' · <span class="pill abstain">grading…</span>' : ' · not graded';
+    card.innerHTML = `<div class="name">${name} ${g?`<span class="pill engine">${g.engine}</span>`:''}</div>
+      <div class="meta">${meta}</div>`;
+    card.onclick = () => selectAssignment(name);
+    el.appendChild(card);
+  }
+}
+
+function llmOpts(){
+  return { provider: $('#provider').value||undefined, model: $('#model').value||undefined,
+           base_url: $('#baseUrl').value||undefined };
+}
+
+async function doUpload(){
+  const name = $('#newAssign').value.trim();
+  if(!name){ $('#uploadMsg').textContent = 'Enter an assignment key first.'; return; }
+  const fd = new FormData();
+  for(const f of $('#fSubs').files) fd.append('submissions', f);
+  if($('#fRef').files[0]) fd.append('reference', $('#fRef').files[0]);
+  if($('#fDesc').files[0]) fd.append('description', $('#fDesc').files[0]);
+  if($('#fCfg').files[0]) fd.append('config', $('#fCfg').files[0]);
+  $('#uploadMsg').textContent = 'Uploading…';
+  const r = await fetch(`/api/assignments/${encodeURIComponent(name)}/upload`, {method:'POST', body:fd});
+  const j = await r.json();
+  const s = j.status||{};
+  $('#uploadMsg').textContent = `Saved: ${s.submissions||0} submissions` +
+    `${s.has_reference?' · reference':''}${s.has_config?' · config':''}${s.has_description?' · description':''}`;
+  loadAssignments();
+}
+
+async function startGrade(){
+  const name = $('#newAssign').value.trim();
+  if(!name){ $('#uploadMsg').textContent = 'Enter an assignment key first.'; return; }
+  const body = { engine: $('#engine').value, llm: llmOpts() };
+  const r = await fetch(`/api/assignments/${encodeURIComponent(name)}/grade`,
+    {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if(r.status===409){ $('#uploadMsg').textContent = 'Already grading this assignment.'; return; }
+  if(r.status>=400){ $('#uploadMsg').textContent = (await r.json()).error||'grade failed'; return; }
+  pollRun(name);
+}
+
+let runTimer = null;
+async function pollRun(name){
+  if(runTimer) clearTimeout(runTimer);
+  const st = await getJSON(`/api/assignments/${encodeURIComponent(name)}/run`);
+  const box = $('#runBox'); box.style.display='block';
+  let h = `<b>Run:</b> <span class="pill ${st.status==='failed'?'abstain':'engine'}">${st.status}</span>`;
+  if(st.stages) for(const s of st.stages) h += ` <span class="stage ${s.status}">${s.stage}</span>`;
+  if(st.review) h += `<div class="muted" style="margin-top:4px">${st.review.total} graded · ${st.review.abstain} need review</div>`;
+  if(st.log_tail) h += `<pre class="log">${st.log_tail.map(esc).join('\n')}</pre>`;
+  box.innerHTML = h;
+  if(st.status==='running'){ runTimer = setTimeout(()=>pollRun(name), 2500); }
+  else { loadAssignments(); if(STATE.assign===name) selectAssignment(name); }
+}
+
+async function selectAssignment(name){
+  STATE.assign = name; STATE.sid = null;
+  $('#newAssign').value = name;   // prefill so re-grading is one click
+  document.querySelectorAll('#assignList .card').forEach(c =>
+    c.classList.toggle('active', c.dataset.assign === name));
+  $('#midTitle').textContent = name + ' — submissions';
+  $('#toolbar').style.display = 'flex';
+  $('#detail').innerHTML = '<div class="empty">Select a submission.</div>';
+  const det = await getJSON(`/api/assignments/${encodeURIComponent(name)}`);
+  STATE.rows = det.submissions;
+  renderTable();
+}
+
+function renderTable(){
+  const rows = STATE.reviewOnly ? STATE.rows.filter(r => r.status==='ABSTAIN') : STATE.rows;
+  const ab = STATE.rows.filter(r=>r.status==='ABSTAIN').length;
+  $('#counts').textContent = `${STATE.rows.length} total · ${ab} abstain`;
+  if(!rows.length){ $('#subTable').innerHTML = '<div class="empty">Nothing here.</div>'; return; }
+  let h = `<table><thead><tr><th>ID</th><th>File</th><th>Score</th><th></th><th>Status</th></tr></thead><tbody>`;
+  for(const r of rows){
+    h += `<tr class="row${r.student_id===STATE.sid?' active':''}" data-sid="${r.student_id}">
+      <td>${r.student_id}${r.reviewed?' <span class="pill reviewed">✓</span>':''}</td>
+      <td class="muted" title="${r.source_file}">${(r.source_file||'').slice(0,22)}</td>
+      <td>${r.final_score}/${r.max_score}</td>
+      <td><div class="bar ${barClass(r.pct)}"><span style="width:${r.pct}%"></span></div></td>
+      <td>${statusPill(r.status)}</td></tr>`;
+  }
+  h += '</tbody></table>';
+  $('#subTable').innerHTML = h;
+  document.querySelectorAll('#subTable tr.row').forEach(tr =>
+    tr.onclick = () => selectSubmission(tr.dataset.sid));
+}
+
+async function selectSubmission(sid){
+  STATE.sid = sid; renderTable();
+  const d = await getJSON(`/api/assignments/${encodeURIComponent(STATE.assign)}/submissions/${encodeURIComponent(sid)}`);
+  $('#detTitle').textContent = `${sid} — ${d.final_score}/${d.max_score} (${d.pct}%)`;
+  let h = '';
+  if(d.status==='ABSTAIN')
+    h += `<div class="reasons">⚑ Flagged for review: ${(d.review_reasons||[]).join(', ')||'low confidence'}</div>`;
+  for(const it of d.items){
+    h += `<div class="item"><div class="hd"><b>${it.name}</b>
+      <span>${it.score}/${it.max}${it.result!==undefined?` <span class="muted">(R${it.result}+P${it.process})</span>`:''}</span></div>`;
+    if(it.feedback) h += `<div class="fb">${esc(it.feedback)}</div>`;
+    const dg = it.diagnostic;
+    if(dg && dg.error_class && dg.error_class!=='none'){
+      h += `<div class="diag"><span class="tag">${dg.error_class}</span>`;
+      if(it.first_divergence) h += `<span class="tag">@ ${it.first_divergence}</span>`;
+      if(dg.fix) h += `fix: ${esc(dg.fix)}`;
+      h += `</div>`;
+    }
+    for(const p of (it.physics||[])) h += `<div class="diag"><span class="tag bad">physics: ${p.name}</span>${esc(p.detail||'')}</div>`;
+    for(const p of (it.fields||[])) h += `<div class="diag"><span class="tag bad">plot: ${p.name}</span>${esc(p.detail||'')}</div>`;
+    h += `</div>`;
+  }
+  if(d.overall_feedback) h += `<div class="item"><div class="hd"><b>Overall</b></div><div class="fb">${esc(d.overall_feedback)}</div></div>`;
+  h += decisionForm(d);
+  $('#detail').innerHTML = h;
+  wireDecision(d);
+}
+
+function decisionForm(d){
+  const cur = d.decision;
+  const done = cur ? `<span class="done">✓ ${cur.decision}${cur.final_score!=null?` → ${cur.final_score}`:''}${cur.note?` · ${esc(cur.note)}`:''}</span>` : '';
+  return `<div class="decision">
+    <b>Human review</b> ${done}
+    <div class="row2">
+      <button id="approve">Approve AI score</button>
+      <button class="ghost" id="override">Override →</button>
+      <input type="number" id="ovScore" placeholder="score" style="width:80px" value="${d.final_score}">
+      <input type="text" id="reviewer" placeholder="reviewer" style="width:110px">
+    </div>
+    <div class="row2"><textarea id="note" placeholder="note (optional)"></textarea></div>
+  </div>`;
+}
+
+function wireDecision(d){
+  const post = async (decision) => {
+    const body = { decision, reviewer: $('#reviewer').value, note: $('#note').value };
+    if(decision==='override') body.final_score = Number($('#ovScore').value);
+    await getJSON(`/api/assignments/${encodeURIComponent(STATE.assign)}/submissions/${encodeURIComponent(d.student_id)}/decision`,
+      { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    // refresh row + assignment badge
+    const det = await getJSON(`/api/assignments/${encodeURIComponent(STATE.assign)}`);
+    STATE.rows = det.submissions; renderTable();
+    selectSubmission(d.student_id); loadAssignments();
+  };
+  $('#approve').onclick = () => post('approve');
+  $('#override').onclick = () => post('override');
+}
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+$('#reviewOnly').onchange = e => { STATE.reviewOnly = e.target.checked; renderTable(); };
+$('#btnUpload').onclick = doUpload;
+$('#btnGrade').onclick = startGrade;
+loadAssignments();
+</script>
+</body>
+</html>
